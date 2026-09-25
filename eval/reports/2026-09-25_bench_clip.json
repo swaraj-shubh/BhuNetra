@@ -1,0 +1,61 @@
+{
+ "meta": {
+  "split": "torchgeo eurosat-test.txt (RGB)",
+  "n_images": 5400,
+  "torch_threads": 3,
+  "device": "cuda",
+  "gpu": "Tesla T4",
+  "deploy_templates": [
+   "a satellite image of {}.",
+   "an aerial photograph of {}.",
+   "{}"
+  ],
+  "classnames": {
+   "AnnualCrop": "annual crop land",
+   "Forest": "forest",
+   "HerbaceousVegetation": "brushland or shrubland",
+   "Highway": "highway or road",
+   "Industrial": "industrial buildings or commercial buildings",
+   "Pasture": "pasture land",
+   "PermanentCrop": "permanent crop land",
+   "Residential": "residential buildings or homes or apartments",
+   "River": "river",
+   "SeaLake": "lake or sea"
+  }
+ },
+ "results": [
+  {
+   "model": "remoteclip-vit-b-32",
+   "n_images": 5400,
+   "top1_deploy_templates": 0.36703703703703705,
+   "top1_clip_eurosat_templates": 0.35685185185185186,
+   "text2img_P@10": 0.5900000000000001,
+   "text2img_mAP": 0.36419202214767543,
+   "img_per_s": 155.95433972307262,
+   "load_s": 6.745943269999998,
+   "peak_rss_gb_delta": 0.590503936
+  },
+  {
+   "model": "georsclip-vit-b-32",
+   "n_images": 5400,
+   "top1_deploy_templates": 0.5246296296296297,
+   "top1_clip_eurosat_templates": 0.5361111111111111,
+   "text2img_P@10": 0.75,
+   "text2img_mAP": 0.6034844959516719,
+   "img_per_s": 192.39733968367563,
+   "load_s": 5.900780188999988,
+   "peak_rss_gb_delta": 1.001762816
+  },
+  {
+   "model": "rs-m-clip",
+   "n_images": 5400,
+   "top1_deploy_templates": 0.30148148148148146,
+   "top1_clip_eurosat_templates": 0.2774074074074074,
+   "text2img_P@10": 0.32999999999999996,
+   "text2img_mAP": 0.21032108222536303,
+   "img_per_s": 182.4204876806455,
+   "load_s": 15.264118424999879,
+   "peak_rss_gb_delta": 0.101502976
+  }
+ ]
+}

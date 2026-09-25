@@ -12,6 +12,7 @@ dependencies = [
     "qdrant-client",
     "open-clip-torch",
     "torch",
+    "torchvision",  # via open_clip; must come from the same CUDA index as torch (tool.uv.sources)
     "pillow",
     "fastapi",
     "uvicorn",
@@ -49,6 +50,10 @@ explicit = true
 
 [tool.uv.sources]
 torch = [
+    { index = "pytorch-cu126", marker = "sys_platform == 'linux'" },
+    { index = "pytorch-cpu", marker = "sys_platform != 'linux'" },
+]
+torchvision = [
     { index = "pytorch-cu126", marker = "sys_platform == 'linux'" },
     { index = "pytorch-cpu", marker = "sys_platform != 'linux'" },
 ]

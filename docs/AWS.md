@@ -1,5 +1,19 @@
 # AWS GPU box: configuration and runbook
 
+## 0. The box we actually run (2026-09-25)
+| | |
+|---|---|
+| Instance | `i-09ea6dd470482c3b3` **g4dn.xlarge**: Tesla T4 16 GB, 4 vCPU, 15 GB RAM · **ap-south-1 (Mumbai)** |
+| AMI | Deep Learning Base AMI with Single CUDA (Ubuntu 24.04) 20260922 · driver 595.91 · Docker 29.8 |
+| Disk | 290 GB root (gp3) |
+| Access | laptop `~/.ssh/config` host **`sih-aws`** (key `~/.ssh/sih.pem`, user `ubuntu`). **The public IP changes on every stop/start**: update `HostName` (or attach an Elastic IP). |
+| Code | push-to-deploy: laptop remote **`aws`** → `~/sih_ps2` on the box (`receive.denyCurrentBranch updateInstead`). `git push aws main` updates the box's working tree. GitHub `origin` stays the source of truth. |
+| Jobs | `tmux` sessions on the box: `stage` (data), `bench` (M1). `ssh sih-aws tmux ls` · attach: `ssh -t sih-aws tmux attach -t stage` |
+
+**Results produced on the box** (e.g. `eval/reports/*`) come back to the laptop with `scp sih-aws:sih_ps2/<path> <path>`, get committed there, and the box copy is moved aside **before** the next `git push aws main`. Otherwise the push is refused because an untracked file would be overwritten.
+
+Mumbai vs Oregon: Sentinel-2 COG reads cross regions (a bit slower, no cost to us because the bucket is open data). Everything else is unchanged.
+
 Why AWS: the dev laptop (8 GB RAM, no CUDA) kept killing long jobs. All staging, benchmarks, training and the offline demo stack run on this box.
 
 ## 1. Instance configuration

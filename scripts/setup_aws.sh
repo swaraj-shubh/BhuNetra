@@ -24,6 +24,7 @@ uv sync --frozen            # Linux resolves torch from the cu126 index (pyproje
 
 echo "== checks"
 uv run python -c "import torch; assert torch.cuda.is_available(), 'CUDA not visible to torch'; print('torch', torch.__version__, 'on', torch.cuda.get_device_name(0))"
+uv run python -c "import torchvision, open_clip; print('torchvision', torchvision.__version__, '| open_clip OK')"
 uv run ruff check .
 uv run pytest -q
 df -h . | tail -1

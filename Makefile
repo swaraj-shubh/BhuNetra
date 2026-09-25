@@ -1,6 +1,6 @@
 # DESIGN.md §6. Keep this file and that table in sync.
-# Windows: install GNU make (winget install ezwinports.make) and run from Git Bash.
-UV      ?= python -m uv
+# AWS box / Linux: uv is on PATH. Windows laptop: make UV="python -m uv" <target> (needs GNU make).
+UV      ?= uv
 RUN     := $(UV) run
 COMPOSE := docker compose --env-file docker/.env -f docker/compose.yaml
 OFFLINE := $(COMPOSE) -f docker/compose.offline.yaml

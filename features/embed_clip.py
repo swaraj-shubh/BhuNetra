@@ -19,8 +19,8 @@ WEIGHTS = paths.models / CFG["name"] / CFG["file"]
 def _load():
     if not WEIGHTS.exists():
         raise FileNotFoundError(f"{WEIGHTS} missing; run: python scripts/stage_data.py models")
-    model, _, preprocess = open_clip.create_model_and_transforms(CFG["arch"])
-    model.load_state_dict(torch.load(WEIGHTS, map_location="cpu"))
+    # same loader as eval/bench_clip.py, so production matches what M1 measured
+    model, _, preprocess = open_clip.create_model_and_transforms(CFG["arch"], pretrained=str(WEIGHTS))
     model.to(DEVICE).eval()
     return model, preprocess, open_clip.get_tokenizer(CFG["arch"])
 

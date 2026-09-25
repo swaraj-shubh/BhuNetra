@@ -1,9 +1,9 @@
 # Model registry (DESIGN.md §4, §9). Weights live in models/<name>/; sha256 + licence in manifests/models.yaml.
 # Never load by hub id at runtime - always models/<name>/<file>.
-text_vec:            # active text->image model; the M1 benchmark decides (ADR pending)
-  name: remoteclip-vit-b-32
+text_vec:            # active text->image model: provisional pick from M1 part 1 (ADR 0002); licence VERIFY
+  name: georsclip-vit-b-32
   arch: ViT-B-32
-  file: RemoteCLIP-ViT-B-32.pt
+  file: ckpt/RS5M_ViT-B-32.pt
   dim: 512           # VERIFY against the model card
   templates: ["a satellite image of {}.", "an aerial photograph of {}.", "{}"]
 
