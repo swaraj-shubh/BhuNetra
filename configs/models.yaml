@@ -1,0 +1,21 @@
+# Model registry (DESIGN.md §4, §9). Weights live in models/<name>/; sha256 + licence in manifests/models.yaml.
+# Never load by hub id at runtime - always models/<name>/<file>.
+text_vec:            # active text->image model; the M1 benchmark decides (ADR pending)
+  name: remoteclip-vit-b-32
+  arch: ViT-B-32
+  file: RemoteCLIP-ViT-B-32.pt
+  dim: 512           # VERIFY against the model card
+  templates: ["a satellite image of {}.", "an aerial photograph of {}.", "{}"]
+
+downloads:           # staged by scripts/stage_data.py models
+  remoteclip-vit-b-32: {repo: chendelong/RemoteCLIP, role: text_vec candidate (M1), allow: [RemoteCLIP-ViT-B-32.pt, README.md]}
+  georsclip-vit-b-32: {repo: Zilun/GeoRSCLIP, role: text_vec candidate (M1), allow: [ckpt/RS5M_ViT-B-32.pt, README.md]}
+  rs-m-clip: {repo: joaodaniel/RS-M-CLIP, role: text_vec candidate (M1), allow: [open_clip_model.safetensors, "*.json", "*.model", "*.txt", README.md]}
+  prithvi-eo-2.0-300m-tl: {repo: ibm-nasa-geospatial/Prithvi-EO-2.0-300M-TL, role: eo_vec encoder (M7), allow: ["*.pt", "*.py", "*.json", "*.yaml", README.md]}
+  xlm-roberta-base: {repo: FacebookAI/xlm-roberta-base, role: RS-M-CLIP text-tower config + tokenizer (no weights), allow: [config.json, tokenizer.json, tokenizer_config.json, sentencepiece.bpe.model]}
+  terramind-1.0-base: {repo: ibm-esa-geospatial/TerraMind-1.0-base, role: SAR/multimodal encoder candidate (benchmark only), allow: ["*.pt", "*.py", "*.json", "*.yaml", README.md]}
+
+text_vec_candidates:   # M1 go/no-go (eval/bench_clip.py). All load from models/<name>/ only.
+  remoteclip-vit-b-32: {arch: ViT-B-32, file: RemoteCLIP-ViT-B-32.pt}
+  georsclip-vit-b-32: {arch: ViT-B-32, file: ckpt/RS5M_ViT-B-32.pt}
+  rs-m-clip: {open_clip_config: open_clip_config.json, file: open_clip_model.safetensors, hf_text_dir: xlm-roberta-base}

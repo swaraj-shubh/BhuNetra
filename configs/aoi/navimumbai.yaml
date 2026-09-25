@@ -1,0 +1,4 @@
+name: navimumbai
+type: peri-urban / water
+why: Creek water, mangroves, dense urban, Navi Mumbai airport construction 2018-2025
+bbox: [72.98, 18.93, 73.17, 19.11]   # lon_min, lat_min, lon_max, lat_max (EPSG:4326)

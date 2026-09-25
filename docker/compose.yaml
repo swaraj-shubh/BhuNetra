@@ -1,0 +1,53 @@
+# SIH26227 stack (DESIGN.md §4, §6). M0: db + qdrant + api. worker, tiles (TiTiler) and web join at M2/M6.
+#   make up           # normal (images already built/pulled)
+#   make up-offline   # + compose.offline.yaml: app network has NO external route (the proof run)
+name: sih26227
+
+services:
+  db:
+    image: postgis/postgis:16-3.5
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-sih}
+      POSTGRES_USER: ${POSTGRES_USER:-sih}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in docker/.env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ../index/schema.sql:/docker-entrypoint-initdb.d/001_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-sih} -d $${POSTGRES_DB:-sih}"]
+      interval: 5s
+      retries: 20
+    networks: [app]
+
+  qdrant:
+    image: qdrant/qdrant:v1.19.1   # matches qdrant-client 1.19.1 in uv.lock
+    volumes:
+      - qdrantdata:/qdrant/storage
+    networks: [app]
+
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.api
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-sih}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-sih}
+      QDRANT_URL: http://qdrant:6333
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+      SIH_ROOT: /app
+    volumes:
+      - ../data:/app/data            # raw/ is never written by the api (DESIGN.md §2.12)
+      - ../models:/app/models:ro
+      - ../manifests:/app/manifests:ro
+    depends_on:
+      db: {condition: service_healthy}
+      qdrant: {condition: service_started}
+    ports: ["127.0.0.1:8000:8000"]
+    networks: [app]
+
+networks:
+  app: {}
+
+volumes:
+  pgdata: {}
+  qdrantdata: {}

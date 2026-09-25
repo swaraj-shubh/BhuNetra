@@ -1,0 +1,5 @@
+# Offline proof (DESIGN.md §2.8): the app network is internal - containers cannot reach the internet.
+# Published ports do not work on internal networks; check with: make offline-check
+networks:
+  app:
+    internal: true

@@ -1,0 +1,16 @@
+# Canonical band name -> band file name as staged in data/raw/<source>/<aoi>/<date>/ (DESIGN.md §7).
+# Masks: see mask_bands. Scale/offset always come from scene.json (raster:bands), never from here.
+sentinel2:
+  bands: { blue: B02, green: B03, red: B04, nir: B08, nir_narrow: B8A, swir1: B11, swir2: B12 }
+  mask_bands: { scl: SCL, cloud_prob: CLD }
+landsat:
+  # Landsat 8/9 OLI B5 (0.85-0.88 um) is spectrally the narrow NIR; it also serves as `nir`. # VERIFY
+  bands: { blue: B2, green: B3, red: B4, nir: B5, nir_narrow: B5, swir1: B6, swir2: B7 }
+  mask_bands: { qa_pixel: QA_PIXEL }
+sentinel1:
+  bands: { vv: VV, vh: VH }   # int16 dB*100, linear = 10**(v/1000)
+
+# Sentinel-2 SCL classes (DESIGN.md §9)
+scl:
+  invalid: [0, 1, 3, 8, 9, 10]   # nodata, saturated, cloud shadow, cloud medium/high, cirrus
+  cloud: [3, 8, 9, 10]           # dilated by quality.CLOUD_DILATE_PX

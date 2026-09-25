@@ -1,0 +1,10 @@
+data/
+models/
+web/vendor/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+docker/.env
+eval/reports/*_limit*

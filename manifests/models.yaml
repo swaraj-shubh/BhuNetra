@@ -1,0 +1,51 @@
+georsclip-vit-b-32:
+  licence: cc
+  path: models/georsclip-vit-b-32
+  role: text_vec candidate (M1)
+  sha256:
+    ckpt/RS5M_ViT-B-32.pt: 129bafaa6a097b8be52e2babf27d24f0a934dae919201e538dc698611bd1ea01
+  source: https://huggingface.co/Zilun/GeoRSCLIP
+  version: 4920188e6eba4e711ef9848cfd7cb77e874ee33f
+prithvi-eo-2.0-300m-tl:
+  licence: apache-2.0
+  path: models/prithvi-eo-2.0-300m-tl
+  role: eo_vec encoder (M7)
+  sha256:
+    Prithvi_EO_V2_300M_TL.pt: 3629cedfbb350faafcb0dac902ae0d3c927e25ce8d9e0024aa1276ec66956ddb
+  source: https://huggingface.co/ibm-nasa-geospatial/Prithvi-EO-2.0-300M-TL
+  version: 63adbd39c271da4c42f447e69b1a7c91a338cdc9
+remoteclip-vit-b-32:
+  licence: VERIFY
+  path: models/remoteclip-vit-b-32
+  role: text_vec candidate (M1)
+  sha256:
+    RemoteCLIP-ViT-B-32.pt: 60014e395d930a3f2963d1d89c8522bf4ad56775571e4356e866864789af85c4
+  source: https://huggingface.co/chendelong/RemoteCLIP
+  version: bf1d8a3ccf2ddbf7c875705e46373bfe542bce38
+rs-m-clip:
+  licence: mit
+  path: models/rs-m-clip
+  role: text_vec candidate (M1)
+  sha256:
+    open_clip_model.safetensors: eec34f8846d518ea0a1a5d2ac7e7d4a2e96309eb1a46c48a67462e3cb65c8222
+    sentencepiece.bpe.model: cfc8146abe2a0488e9e2a0c56de7952f7c11ab059eca145a0a727afce0db2865
+    tokenizer.json: f59925fcb90c92b894cb93e51bb9b4a6105c5c249fe54ce1c704420ac39b81af
+  source: https://huggingface.co/joaodaniel/RS-M-CLIP
+  version: 902a20c19909e5e17e01fb7a3c6d4bfee468f42b
+terramind-1.0-base:
+  licence: apache-2.0
+  path: models/terramind-1.0-base
+  role: SAR/multimodal encoder candidate (benchmark only)
+  sha256:
+    TerraMind_v1_base.pt: 83c3a0938067c83867a46e564443c2fa38383bf4f966d931b11cb025b847d7ec
+  source: https://huggingface.co/ibm-esa-geospatial/TerraMind-1.0-base
+  version: fb96c70d0a5f68dcc44030b89cbfd8ec3fb0c67a
+xlm-roberta-base:
+  licence: mit
+  path: models/xlm-roberta-base
+  role: RS-M-CLIP text-tower config + tokenizer (no weights)
+  sha256:
+    sentencepiece.bpe.model: cfc8146abe2a0488e9e2a0c56de7952f7c11ab059eca145a0a727afce0db2865
+    tokenizer.json: a898ea75433890f6610f4e470b8ebeb0c21dce5c8dd61f892eb09eb5919d2e2c
+  source: https://huggingface.co/FacebookAI/xlm-roberta-base
+  version: e73636d4f797dec63c3081bb6ed5c7b0bb3f2089

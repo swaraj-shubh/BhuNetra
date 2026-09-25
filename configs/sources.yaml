@@ -1,0 +1,92 @@
+# Staging sources (ONLINE, scripts/stage_data.py only). DESIGN.md §9, ADR 0001.
+# assets: STAC asset key -> band file name on disk. every: month (best acquisition per month) | year | once.
+# nearest: categorical/bitmask bands (never interpolate). to_db: store SAR as int16 dB*100.
+stac:
+  earth_search: https://earth-search.aws.element84.com/v1
+  planetary: https://planetarycomputer.microsoft.com/api/stac/v1
+
+staging:
+  series_start: "2019-01-01"
+  series_end: "2026-08-31"
+  min_aoi_coverage: 0.95
+  min_free_gb: 8.0
+  workers: 4
+  order: [cop_dem, jrc_gsw, worldcover, io_lulc, sentinel2, sentinel1, landsat]   # S2 first: M2/M3 need it; S1/Landsat are M9
+
+sources:
+  sentinel2:   # Earth Search C1 L2A; CLD = Sen2Cor cloud probability 0-100 (20 m)
+    stac: earth_search
+    collection: sentinel-2-c1-l2a
+    licence: Copernicus Sentinel data terms (free, attribution)
+    gsd: 10
+    every: month
+    max_cloud: 40
+    assets: {blue: B02, green: B03, red: B04, nir: B08, nir08: B8A, swir16: B11, swir22: B12, scl: SCL, cloud: CLD}
+    nearest: [SCL]
+  sentinel1:   # RTC gamma0 (terrain-corrected), linear power -> int16 dB*100; one relative orbit per AOI
+    stac: planetary
+    collection: sentinel-1-rtc
+    licence: CC-BY-4.0 (RTC product); Copernicus Sentinel data terms
+    gsd: 10
+    every: month
+    same_orbit: true
+    to_db: true
+    assets: {vv: VV, vh: VH}
+  landsat:     # L8/L9 only (no L7 SLC-off); native 30 m
+    stac: planetary
+    collection: landsat-c2-l2
+    licence: USGS public domain
+    gsd: 30
+    every: month
+    max_cloud: 40
+    query: {platform: {in: [landsat-8, landsat-9]}}
+    assets: {blue: B2, green: B3, red: B4, nir08: B5, swir16: B6, swir22: B7, qa_pixel: QA_PIXEL}
+    nearest: [QA_PIXEL]
+  worldcover:  # ESA WorldCover 2020, 2021 - weak labels
+    stac: planetary
+    collection: esa-worldcover
+    licence: CC-BY-4.0
+    gsd: 10
+    every: year
+    assets: {map: MAP}
+    nearest: [MAP]
+  io_lulc:     # Impact Observatory annual LULC 2017-2023 - transitions (Dynamic World stand-in)
+    stac: planetary
+    collection: io-lulc-annual-v02
+    licence: CC-BY-4.0
+    gsd: 10
+    every: year
+    assets: {data: LULC}
+    nearest: [LULC]
+  jrc_gsw:     # JRC Global Surface Water - permanent vs seasonal water
+    stac: planetary
+    collection: jrc-gsw
+    licence: "JRC GSW terms (free, attribution) # VERIFY"
+    gsd: 30
+    every: once
+    assets: {occurrence: OCCURRENCE, seasonality: SEASONALITY, change: CHANGE}
+    nearest: [OCCURRENCE, SEASONALITY, CHANGE]
+  cop_dem:     # Copernicus GLO-30 DEM
+    stac: planetary
+    collection: cop-dem-glo-30
+    licence: "Copernicus DEM licence (free, attribution) # VERIFY"
+    gsd: 30
+    every: once
+    assets: {data: DEM}
+
+osm:   # historical road networks via Overpass attic queries ([date:...]); ohsome /elements/geometry returns 403
+  urls: [https://overpass-api.de/api/interpreter, https://overpass.private.coffee/api/interpreter]
+  query: '[out:json][timeout:180][date:"{date}T00:00:00Z"];way["highway"]({s},{w},{n},{e});out geom tags;'
+  user_agent: sih26227-staging/0.1
+  pause_s: 5
+  attempts: 4
+  timeout_s: 200
+  snapshots: ["2019-01-01", "2020-01-01", "2021-01-01", "2022-01-01", "2023-01-01", "2024-01-01", "2025-01-01", "2026-01-01"]
+
+benchmarks:
+  eurosat: {hf_dataset: torchgeo/eurosat, allow: [EuroSAT.zip, "*.txt", README.md], licence: MIT, role: M1 zero-shot CLIP benchmark}
+  oscd: {hf_dataset: hkristen/oscd, allow: null, licence: CC-BY-NC-SA-4.0, role: M3 change-detection sanity check}
+
+web_vendor:
+  base_url: https://cdn.jsdelivr.net/npm/maplibre-gl@5/dist/
+  files: [maplibre-gl.js, maplibre-gl.css]
