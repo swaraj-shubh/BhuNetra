@@ -159,12 +159,17 @@ def ingest_season(aoi: str, season: str, folders: list[Path], tiles: list[tiling
     with db.engine().connect() as conn:
         have = conn.execute(
             text(
-                "SELECT lineage->'observations' FROM composites c JOIN tiles t USING (tile_id) "
-                "WHERE t.aoi = :aoi AND c.season = :s LIMIT 1"
+                "SELECT lineage->'observations' AS obs, model_versions FROM composites c JOIN tiles t "
+                "USING (tile_id) WHERE t.aoi = :aoi AND c.season = :s LIMIT 1"
             ),
             {"aoi": aoi, "s": season},
-        ).scalar()
-    if have is not None and sorted(o["fingerprint"] for o in have) == fps:
+        ).first()
+    # same inputs AND same embedding model -> nothing to do; a new text_vec model re-embeds (ADR 0002 fallback)
+    if (
+        have is not None
+        and sorted(o["fingerprint"] for o in have.obs) == fps
+        and have.model_versions.get("text_vec") == embed_clip.version()
+    ):
         return "skipped"
 
     with timed("composite", aoi=aoi, season=season, n_obs=len(folders)):
@@ -285,7 +290,23 @@ def ingest_aoi(aoi: str) -> dict:
     for season in sorted(by_season):
         counts[f"season_{ingest_season(aoi, season, by_season[season], tiles)}"] += 1
         log.info(json.dumps({"aoi": aoi, "season": season, **counts}))
-    return dict(counts)
+    # a failed Qdrant upsert after a committed season is skipped on rerun; surface it (fix: make reconcile)
+    with db.engine().connect() as conn:
+        in_db = conn.execute(
+            text(
+                "SELECT count(*) FROM composites c JOIN tiles t USING (tile_id) "
+                "WHERE t.aoi = :a AND c.text_vec IS NOT NULL"
+            ),
+            {"a": aoi},
+        ).scalar()
+    in_qdrant = qdrant.count({"aoi": aoi})
+    if in_db != in_qdrant:
+        log.warning(
+            json.dumps(
+                {"aoi": aoi, "postgis_vectors": in_db, "qdrant_points": in_qdrant, "fix": "make reconcile"}
+            )
+        )
+    return dict(counts) | {"postgis_vectors": in_db, "qdrant_points": in_qdrant}
 
 
 if __name__ == "__main__":

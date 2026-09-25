@@ -9,14 +9,14 @@ HOST=${HOST:-sih-aws}
 
 git push -q origin main
 for attempt in 1 2 3 4 5; do
-  for f in manifests/datasets.yaml manifests/models.yaml; do
+  for f in manifests/datasets.yaml manifests/models.yaml manifests/build.json; do
     scp -q "$HOST:sih_ps2/$f" "$f"
   done
   if ! git diff --quiet -- manifests/; then
     git add manifests/
     git commit -q -m "manifests: sync from AWS box staging"
   fi
-  ssh "$HOST" 'cd ~/sih_ps2 && git checkout -- manifests/'
+  ssh "$HOST" 'cd ~/sih_ps2 && git checkout -- manifests/ && git clean -fq -- manifests/'  # build.json starts untracked
   if git push -q aws main 2>/dev/null; then
     git push -q origin main
     ssh "$HOST" 'cd ~/sih_ps2 && git log --oneline -1'

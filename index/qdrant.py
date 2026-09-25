@@ -13,6 +13,12 @@ from configs.settings import models as model_cfg
 from configs.settings import paths
 
 COLLECTION = "tiles"
+PAYLOAD_INDEXES = {
+    "aoi": models.PayloadSchemaType.KEYWORD,
+    "season": models.PayloadSchemaType.KEYWORD,
+    "start_date": models.PayloadSchemaType.DATETIME,
+    "end_date": models.PayloadSchemaType.DATETIME,
+}
 EO_VEC_DIM = int(os.environ.get("EO_VEC_DIM", "1024"))  # VERIFY Prithvi-EO-2.0-300M embed dim before M7
 
 
@@ -38,6 +44,9 @@ def ensure_collection() -> None:
                 "eo_vec": models.VectorParams(size=EO_VEC_DIM, distance=models.Distance.COSINE),
             },
         )
+    # filtered search scans every payload without these (dholera: 4.7 s vs 0.36 s unfiltered)
+    for field, schema in PAYLOAD_INDEXES.items():
+        c.create_payload_index(COLLECTION, field, schema)
 
 
 def recreate_collection() -> None:
@@ -55,6 +64,15 @@ def upsert(rows: list[tuple[str, dict, dict]]) -> None:
             for key, p, vec in rows
         ],
     )
+
+
+def count(match: dict[str, str]) -> int:
+    if not client().collection_exists(COLLECTION):
+        return 0
+    flt = models.Filter(
+        must=[models.FieldCondition(key=k, match=models.MatchValue(value=v)) for k, v in match.items()]
+    )
+    return client().count(COLLECTION, count_filter=flt, exact=True).count
 
 
 def search(vector, using: str, k: int, query_filter: models.Filter | None = None) -> list[models.ScoredPoint]:

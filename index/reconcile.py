@@ -30,7 +30,7 @@ def rebuild() -> int:
     n = 0
     with db.engine().connect() as conn:
         rows = conn.execution_options(stream_results=True, yield_per=BATCH).execute(text(SELECT))
-        for part in rows.partitions():
+        for part in rows.partitions(BATCH):  # explicit size: pg8000 ignores yield_per
             qdrant.upsert(
                 [
                     (

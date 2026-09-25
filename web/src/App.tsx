@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import * as maplibregl from "maplibre-gl";
 import type { GeoJSONSource, LngLatBoundsLike, MapLayerMouseEvent } from "maplibre-gl";
+// v6 looks for its worker next to its own module, which does not exist once bundled: bundle it and point there.
+import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
+
+maplibregl.setWorkerUrl(workerUrl);
 
 // DESIGN.md §12: every site carries provenance. No basemap: the demo runs offline (§2.8).
 type Site = {
@@ -27,6 +31,7 @@ export default function App() {
   const [sites, setSites] = useState<Site[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [status, setStatus] = useState("");
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     const m = new maplibregl.Map({
@@ -45,6 +50,7 @@ export default function App() {
         filter: ["==", ["get", "tile_id"], ""],
         paint: { "line-color": "#ff3b30", "line-width": 4 },
       });
+      setReady(true);
       m.on("click", "sites-line", (e: MapLayerMouseEvent) => setSelected(String(e.features?.[0]?.properties?.tile_id ?? "")));
     });
     map.current = m;
@@ -53,7 +59,7 @@ export default function App() {
 
   useEffect(() => {
     const m = map.current;
-    if (!m || !m.isStyleLoaded()) return;
+    if (!m || !ready) return; // isStyleLoaded() is false while image sources load
     for (const id of chipIds.current) {
       if (m.getLayer(id)) m.removeLayer(id);
       if (m.getSource(id)) m.removeSource(id);
@@ -79,7 +85,7 @@ export default function App() {
       const ys = sites.flatMap((s) => s.geometry.coordinates[0].map((c: GeoJSON.Position) => c[1]));
       m.fitBounds([Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)] as LngLatBoundsLike, { padding: 60 });
     }
-  }, [sites]);
+  }, [sites, ready]);
 
   useEffect(() => {
     const m = map.current;
