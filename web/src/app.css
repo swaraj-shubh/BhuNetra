@@ -1,0 +1,20 @@
+:root { font-family: system-ui, sans-serif; color: #e6e6e6; background: #111418; }
+body { margin: 0; }
+.app { display: flex; height: 100vh; }
+aside { width: 360px; padding: 12px 16px; overflow-y: auto; box-sizing: border-box; border-right: 1px solid #2a2f36; }
+main { flex: 1; }
+h1 { font-size: 18px; margin: 4px 0 12px; }
+h2 { font-size: 14px; margin: 12px 0 4px; }
+form { display: flex; flex-wrap: wrap; gap: 6px; }
+input { flex: 1 1 100%; padding: 8px; background: #1b1f24; color: inherit; border: 1px solid #3a414a; border-radius: 4px; }
+select, button { padding: 6px 10px; background: #1b1f24; color: inherit; border: 1px solid #3a414a; border-radius: 4px; }
+button { background: #f5b400; color: #111; border: none; font-weight: 600; cursor: pointer; }
+.status { font-size: 12px; color: #9aa3ad; }
+.note { font-size: 11px; color: #7d8691; }
+.results { list-style: none; padding: 0; margin: 0; }
+.results li { display: flex; gap: 8px; padding: 6px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+.results li:hover { background: #1f242b; }
+.results li.sel { background: #2b2410; outline: 1px solid #f5b400; }
+.results img { image-rendering: pixelated; flex: none; }
+.prov p { font-size: 11px; word-break: break-all; color: #b8c0c9; }
+@media (max-width: 700px) { .app { flex-direction: column; } aside { width: 100%; height: 45vh; } }

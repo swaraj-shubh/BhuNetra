@@ -11,6 +11,7 @@ from pathlib import Path
 
 import rasterio
 from fastapi import FastAPI, HTTPException, Response
+from fastapi.staticfiles import StaticFiles
 from PIL import Image
 from pydantic import BaseModel, Field
 from pyproj import Transformer
@@ -154,3 +155,8 @@ def chip(tile_id: str, season: str, size: int = 256) -> Response:
 def _grid(aoi: str) -> tuple[tuple[float, float, float, float], int]:
     epsg = tiling.aoi_epsg(aois[aoi].bbox)
     return tiling.aoi_bounds_m(aois[aoi].bbox, epsg), epsg
+
+
+# Workbench (web/, built into dist/ by docker/Dockerfile.api). Mounted last so API routes win.
+if (paths.web / "dist").is_dir():
+    app.mount("/", StaticFiles(directory=paths.web / "dist", html=True), name="web")

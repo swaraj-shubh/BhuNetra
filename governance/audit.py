@@ -79,3 +79,15 @@ def load(conn: Connection) -> list[Entry]:
         text("SELECT seq, ts, actor, action, payload, prev_hash, entry_hash FROM audit_log ORDER BY seq")
     )
     return [Entry(*r) for r in rows]
+
+
+if __name__ == "__main__":  # make audit-verify
+    import sys
+
+    from index import db
+
+    with db.engine().connect() as c:
+        entries = load(c)
+    broken = verify(entries)
+    print(json.dumps({"ok": broken is None, "entries": len(entries), "broken_at": broken}))
+    sys.exit(1 if broken else 0)

@@ -54,8 +54,8 @@ ingest-scene:          ## make ingest-scene PATH=<file>   (M9)
 reconcile:             ## rebuild Qdrant from PostGIS (M2)
 	@$(HOST_ENV) $(RUN) python -m index.reconcile
 
-audit-verify:          ## (M8)
-	@echo "not implemented yet: governance/audit.py (M8)"; exit 1
+audit-verify:          ## recompute the audit hash chain (GET /audit/verify lands in M8)
+	@$(HOST_ENV) $(RUN) python -m governance.audit
 
 bench-clip:            ## M1 go/no-go part 1: zero-shot EuroSAT per candidate -> eval/reports/
 	HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 $(RUN) python eval/bench_clip.py
