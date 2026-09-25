@@ -40,6 +40,12 @@ def ensure_collection() -> None:
         )
 
 
+def recreate_collection() -> None:
+    if client().collection_exists(COLLECTION):
+        client().delete_collection(COLLECTION)
+    ensure_collection()
+
+
 def upsert(rows: list[tuple[str, dict, dict]]) -> None:
     """rows: (key, payload, {vector_name: vector}). Call only after the PostGIS commit succeeded."""
     client().upsert(

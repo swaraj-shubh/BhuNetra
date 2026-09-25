@@ -18,10 +18,14 @@ def dilate(mask: np.ndarray, px: int) -> np.ndarray:
     return out
 
 
-def s2_valid_mask(scl: np.ndarray, cld: np.ndarray | None = None) -> np.ndarray:
-    """True where usable: SCL not invalid, Sen2Cor cloud probability below CLOUD_PROB; clouds dilated."""
+def s2_cloud_mask(scl: np.ndarray, cld: np.ndarray | None = None) -> np.ndarray:
+    """True on cloud/shadow (SCL classes or Sen2Cor CLD >= CLOUD_PROB), dilated by CLOUD_DILATE_PX."""
     cloudy = np.isin(scl, bands["scl"]["cloud"])
     if cld is not None:
         cloudy |= cld >= T.quality.CLOUD_PROB * 100  # CLD is 0-100
-    invalid = np.isin(scl, bands["scl"]["invalid"])
-    return ~(invalid | dilate(cloudy, T.quality.CLOUD_DILATE_PX))
+    return dilate(cloudy, T.quality.CLOUD_DILATE_PX)
+
+
+def s2_valid_mask(scl: np.ndarray, cld: np.ndarray | None = None) -> np.ndarray:
+    """True where usable: SCL not invalid and not (dilated) cloud."""
+    return ~(np.isin(scl, bands["scl"]["invalid"]) | s2_cloud_mask(scl, cld))

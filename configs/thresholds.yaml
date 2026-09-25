@@ -1,9 +1,11 @@
 # DESIGN.md §8. Initial values from the team reference; tune ONLY on the calibration split.
 # Any change: record it in the commit message (what, why, evidence) and bump cascade_version if it affects events.
-quality:   { Q_MIN: 0.6, SHIFT_ACCEPT_PX: 0.5, SHIFT_REJECT_PX: 1.0, VALID_FRAC_IDX: 0.8, VALID_FRAC_EMB: 0.95, CLOUD_PROB: 0.4, CLOUD_DILATE_PX: 3 }
+quality:   { Q_MIN: 0.6, SHIFT_ACCEPT_PX: 0.5, SHIFT_REJECT_PX: 1.0, VALID_FRAC_IDX: 0.8, VALID_FRAC_EMB: 0.95, CLOUD_PROB: 0.4, CLOUD_DILATE_PX: 3, SUN_ELEV_MIN: 25 }
 tiling:    { TILE_M: 640, STRIDE_M: 320 }
 breaks:    { R_MAX: 3.0, K_PERSIST: 3, BASELINE_MONTHS: 12 }
 classify:  { CONS_DNDVI: -0.15, CONS_DNDBI: 0.08, CLR_DNDVI: -0.20, CLR_DBSI: 0.08, WATER_DMNDWI: 0.25, WATER_FRAC: 0.10, ROAD_ELONG: 4.0, ROAD_WIDTH_PX: 3 }
 events:    { OPERATING_CONF: 0.5, TARGET_PRECISION: 0.85 }
 retrieval: { TOP_N: 500, TOP_K_SITES: 20, DEDUP_RADIUS_M: 320 }
 cluster:   { MIN_CLUSTER_SIZE: 10, UMAP_DIM: 20 }
+# IMD seasons (M2 decision, 2026-09-26). DJF belongs to the year of its Jan/Feb (Dec 2023 -> 2024-DJF).
+composites: { SEASONS: { "DJF": [12, 1, 2], "MAM": [3, 4, 5], "JJAS": [6, 7, 8, 9], "ON": [10, 11] } }  # quoted: bare ON is YAML true

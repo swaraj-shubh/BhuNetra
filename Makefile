@@ -4,6 +4,9 @@ UV      ?= uv
 RUN     := $(UV) run
 COMPOSE := docker compose --env-file docker/.env -f docker/compose.yaml
 OFFLINE := $(COMPOSE) -f docker/compose.offline.yaml
+# host-side tools (worker, reconcile) reach the stack via loopback ports; credentials from docker/.env
+-include docker/.env
+HOST_ENV := DATABASE_URL=postgresql://$(or $(POSTGRES_USER),sih):$(POSTGRES_PASSWORD)@127.0.0.1:5432/$(or $(POSTGRES_DB),sih)             QDRANT_URL=http://127.0.0.1:6333
 
 .PHONY: up down up-offline offline-check test lint db-migrate stage ingest ingest-scene reconcile \
         audit-verify bench-clip eval report verify-weights stats
@@ -42,14 +45,14 @@ stats:
 	  d = TestClient(app).get('/stats').json(); d.pop('staging_report', None); print(json.dumps(d, indent=1))"
 
 # --- land with their milestones (DESIGN.md §13) ---
-ingest:                ## make ingest AOI=<name>   (M2/M3)
-	@echo "not implemented yet: worker ingest (M2)"; exit 1
+ingest:                ## make ingest AOI=<name>   (M2: S2 -> q -> composites -> text_vec)
+	@$(HOST_ENV) $(RUN) python -m worker.ingest $(AOI)
 
 ingest-scene:          ## make ingest-scene PATH=<file>   (M9)
 	@echo "not implemented yet (M9)"; exit 1
 
 reconcile:             ## rebuild Qdrant from PostGIS (M2)
-	@echo "not implemented yet: index/reconcile.py (M2)"; exit 1
+	@$(HOST_ENV) $(RUN) python -m index.reconcile
 
 audit-verify:          ## (M8)
 	@echo "not implemented yet: governance/audit.py (M8)"; exit 1

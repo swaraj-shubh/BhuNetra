@@ -26,6 +26,7 @@ class Quality(_Strict):
     VALID_FRAC_EMB: float
     CLOUD_PROB: float
     CLOUD_DILATE_PX: int
+    SUN_ELEV_MIN: float  # q penalty below this sun elevation (degrees; DESIGN.md §7)
 
 
 class Tiling(_Strict):
@@ -66,6 +67,10 @@ class Cluster(_Strict):
     UMAP_DIM: int
 
 
+class Composites(_Strict):
+    SEASONS: dict[str, list[int]]  # season name -> calendar months
+
+
 class Thresholds(_Strict):
     quality: Quality
     tiling: Tiling
@@ -74,6 +79,7 @@ class Thresholds(_Strict):
     events: Events
     retrieval: Retrieval
     cluster: Cluster
+    composites: Composites
 
 
 class AOI(_Strict):
@@ -89,6 +95,7 @@ class Paths(_Strict):
     raw: Path = ROOT / "data" / "raw"
     stac: Path = ROOT / "data" / "stac"
     tiles: Path = ROOT / "data" / "tiles"
+    composites: Path = ROOT / "data" / "composites"
     benchmarks: Path = ROOT / "data" / "benchmarks"
     qdrant: Path = ROOT / "data" / "qdrant"
     logs: Path = ROOT / "data" / "manifests"  # staging log, jsonl lineage

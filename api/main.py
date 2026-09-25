@@ -1,17 +1,28 @@
-"""FastAPI app (DESIGN.md §12). M0: /stats. The other contract routes land with their milestones.
+"""FastAPI app (DESIGN.md §12). M2: /stats, /search/text (no parser yet: M4), composite chips for the map.
 
 uvicorn api.main:app --port 8000
 """
 
+import io
 import json
 import shutil
+import time
 from pathlib import Path
 
-from fastapi import FastAPI
+import rasterio
+from fastapi import FastAPI, HTTPException, Response
+from PIL import Image
+from pydantic import BaseModel, Field
 from pyproj import Transformer
+from qdrant_client import models as qm
+from sqlalchemy import text
 
-from configs.settings import aois, paths, sources
+from configs.settings import T, aois, paths, sources
+from index import db, qdrant
 from ingest import tiling
+from ingest.standardise import rgb_quicklook
+
+LATENCY_MS: dict[str, float] = {}  # last measured, per route (reported by /stats)
 
 app = FastAPI(title="SIH26227 EO archive")
 
@@ -52,6 +63,94 @@ def stats() -> dict:
                 shutil.disk_usage(paths.data if paths.data.exists() else paths.root).free / 1e9, 1
             ),
         },
-        "latency_ms": None,  # TODO(measure) once /search exists
+        "latency_ms": LATENCY_MS or None,
         "staging_report": json.loads(report.read_text(encoding="utf-8")) if report.exists() else None,
     }
+
+
+class TextQuery(BaseModel):
+    query: str = Field(min_length=1, max_length=500)
+    aoi: str | None = None
+    date_range: tuple[str, str] | None = None  # ISO dates; matches composites whose season overlaps it
+    sensor: str | None = None  # only sentinel2 composites exist in M2
+    k: int = Field(default=T.retrieval.TOP_K_SITES, ge=1, le=200)
+
+
+@app.post("/search/text")
+def search_text(q: TextQuery) -> dict:
+    """Encode the query (the only model call on the query path, §2.1) -> Qdrant text_vec -> best season per tile."""
+    from features import embed_clip  # torch import only when searching
+
+    t0 = time.perf_counter()
+    must: list = []
+    if q.aoi:
+        must.append(qm.FieldCondition(key="aoi", match=qm.MatchValue(value=q.aoi)))
+    if q.date_range:
+        must += [
+            qm.FieldCondition(key="end_date", range=qm.DatetimeRange(gte=q.date_range[0])),
+            qm.FieldCondition(key="start_date", range=qm.DatetimeRange(lte=q.date_range[1])),
+        ]
+    hits = qdrant.search(embed_clip.embed_text(q.query), "text_vec", T.retrieval.TOP_N, qm.Filter(must=must))
+    best: dict[str, qm.ScoredPoint] = {}
+    for h in hits:  # hits are score-sorted: keep each tile's best season
+        best.setdefault(h.payload["tile_id"], h)
+    top = list(best.values())[: q.k]
+
+    with db.engine().connect() as conn:
+        rows = conn.execute(
+            text(
+                "SELECT c.comp_id::text AS comp_id, ST_AsGeoJSON(t.geom) AS geom, c.model_versions, "
+                "c.lineage->'observations' AS obs FROM composites c JOIN tiles t USING (tile_id) "
+                "WHERE c.comp_id = ANY(CAST(:ids AS uuid[]))"
+            ),
+            {"ids": [h.payload["comp_id"] for h in top]},
+        ).mappings()
+        by_comp = {r["comp_id"]: r for r in rows}
+    sites = []
+    for rank, h in enumerate(top, 1):
+        r = by_comp[h.payload["comp_id"]]
+        sites.append(
+            {
+                "rank": rank,
+                "tile_id": h.payload["tile_id"],
+                "aoi": h.payload["aoi"],
+                "season": h.payload["season"],
+                "score": round(h.score, 4),
+                "q_mean": h.payload["q_mean"],
+                "geometry": json.loads(r["geom"]),
+                "chip_url": f"/chips/{h.payload['tile_id']}/{h.payload['season']}.png",
+                "provenance": {
+                    "scene_ids": [o["scene_id"] for o in r["obs"]],
+                    "model_versions": r["model_versions"],
+                    "cascade_version": None,  # no change cascade involved in a semantic hit
+                },
+            }
+        )
+    LATENCY_MS["search_text"] = round((time.perf_counter() - t0) * 1000, 1)
+    return {
+        "parsed": {"semantic": q.query, "temporal": q.date_range, "spatial": q.aoi, "sensor": q.sensor},
+        "sites": sites,
+    }
+
+
+@app.get("/chips/{tile_id}/{season}.png")
+def chip(tile_id: str, season: str, size: int = 256) -> Response:
+    """True-colour chip of one tile's seasonal composite (display only)."""
+    aoi = tile_id.split("_")[0]
+    f = paths.composites / aoi / f"{season}.tif"
+    if aoi not in aois or not f.exists() or not season.replace("-", "").isalnum():
+        raise HTTPException(404)
+    t = next((t for t in tiling.tiles(aoi, *_grid(aoi)) if t.tile_id == tile_id), None)
+    if t is None:
+        raise HTTPException(404)
+    with rasterio.open(f) as d:
+        w = tiling.window(t, d.transform)
+        r, g, b = (d.read(d.descriptions.index(n) + 1, window=w) for n in ("red", "green", "blue"))
+    buf = io.BytesIO()
+    Image.fromarray(rgb_quicklook(r, g, b)).resize((size, size), Image.Resampling.NEAREST).save(buf, "PNG")
+    return Response(buf.getvalue(), media_type="image/png")
+
+
+def _grid(aoi: str) -> tuple[tuple[float, float, float, float], int]:
+    epsg = tiling.aoi_epsg(aois[aoi].bbox)
+    return tiling.aoi_bounds_m(aois[aoi].bbox, epsg), epsg

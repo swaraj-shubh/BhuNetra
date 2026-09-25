@@ -17,12 +17,14 @@ services:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-sih} -d $${POSTGRES_DB:-sih}"]
       interval: 5s
       retries: 20
+    ports: ["127.0.0.1:5432:5432"]   # host-side worker (make ingest); loopback only
     networks: [app]
 
   qdrant:
     image: qdrant/qdrant:v1.19.1   # matches qdrant-client 1.19.1 in uv.lock
     volumes:
       - qdrantdata:/qdrant/storage
+    ports: ["127.0.0.1:6333:6333"]
     networks: [app]
 
   api:
