@@ -31,9 +31,9 @@
    "top1_clip_eurosat_templates": 0.35685185185185186,
    "text2img_P@10": 0.5900000000000001,
    "text2img_mAP": 0.36419202214767543,
-   "img_per_s": 155.95433972307262,
-   "load_s": 6.745943269999998,
-   "peak_rss_gb_delta": 0.590503936
+   "img_per_s": 203.91715137560172,
+   "load_s": 2.5216457059996173,
+   "peak_rss_gb_delta": 0.536813568
   },
   {
    "model": "georsclip-vit-b-32",
@@ -42,9 +42,42 @@
    "top1_clip_eurosat_templates": 0.5361111111111111,
    "text2img_P@10": 0.75,
    "text2img_mAP": 0.6034844959516719,
-   "img_per_s": 192.39733968367563,
-   "load_s": 5.900780188999988,
-   "peak_rss_gb_delta": 1.001762816
+   "img_per_s": 263.7650836432667,
+   "load_s": 2.27905107100014,
+   "peak_rss_gb_delta": 1.002000384
+  },
+  {
+   "model": "openai-clip-vit-b-32",
+   "n_images": 5400,
+   "top1_deploy_templates": 0.4925925925925926,
+   "top1_clip_eurosat_templates": 0.455,
+   "text2img_P@10": 0.6399999999999999,
+   "text2img_mAP": 0.42040244570269386,
+   "img_per_s": 256.9758586155877,
+   "load_s": 1.5519993179996163,
+   "peak_rss_gb_delta": 0.010420224
+  },
+  {
+   "model": "georsclip-vit-b-32-quickgelu",
+   "n_images": 5400,
+   "top1_deploy_templates": 0.6698148148148149,
+   "top1_clip_eurosat_templates": 0.6748148148148149,
+   "text2img_P@10": 0.78,
+   "text2img_mAP": 0.6349493891130547,
+   "img_per_s": 250.3459223511307,
+   "load_s": 1.8997220110004491,
+   "peak_rss_gb_delta": 0.005185536
+  },
+  {
+   "model": "remoteclip-vit-b-32-quickgelu",
+   "n_images": 5400,
+   "top1_deploy_templates": 0.3775925925925926,
+   "top1_clip_eurosat_templates": 0.33685185185185185,
+   "text2img_P@10": 0.55,
+   "text2img_mAP": 0.3544312723756763,
+   "img_per_s": 250.26244239104804,
+   "load_s": 2.0871381049992124,
+   "peak_rss_gb_delta": 0.00516096
   },
   {
    "model": "rs-m-clip",
@@ -53,9 +86,9 @@
    "top1_clip_eurosat_templates": 0.2774074074074074,
    "text2img_P@10": 0.32999999999999996,
    "text2img_mAP": 0.21032108222536303,
-   "img_per_s": 182.4204876806455,
-   "load_s": 15.264118424999879,
-   "peak_rss_gb_delta": 0.101502976
+   "img_per_s": 251.63056891743656,
+   "load_s": 12.631766810000045,
+   "peak_rss_gb_delta": 0.086769664
   }
  ]
 }

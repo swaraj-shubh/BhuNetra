@@ -125,6 +125,77 @@ jrc_gsw/navimumbai:
   - '2026-08-31'
   sha256: per file in each <date>/scene.json
   source: https://planetarycomputer.microsoft.com/api/stac/v1/collections/jrc-gsw
+landsat/dholera:
+  acquisitions: 85
+  failed: []
+  licence: USGS public domain
+  months_without_acquisition:
+  - 2020-07
+  - 2021-07
+  - 2021-08
+  - 2021-09
+  - 2023-08
+  - 2024-08
+  - 2026-08
+  path: data/raw/landsat/dholera
+  range:
+  - '2019-01-01'
+  - '2026-08-31'
+  sha256: per file in each <date>/scene.json
+  source: https://planetarycomputer.microsoft.com/api/stac/v1/collections/landsat-c2-l2
+landsat/hasdeo:
+  acquisitions: 71
+  failed: []
+  licence: USGS public domain
+  months_without_acquisition:
+  - 2019-04
+  - 2019-07
+  - 2019-08
+  - 2019-09
+  - 2020-06
+  - 2020-07
+  - 2020-08
+  - 2021-02
+  - 2021-07
+  - 2021-08
+  - 2021-09
+  - 2022-07
+  - 2022-08
+  - 2023-07
+  - 2023-08
+  - 2024-07
+  - 2024-08
+  - 2025-07
+  - 2025-08
+  - 2026-07
+  - 2026-08
+  path: data/raw/landsat/hasdeo
+  range:
+  - '2019-01-01'
+  - '2026-08-31'
+  sha256: per file in each <date>/scene.json
+  source: https://planetarycomputer.microsoft.com/api/stac/v1/collections/landsat-c2-l2
+landsat/navimumbai:
+  acquisitions: 82
+  failed: []
+  licence: USGS public domain
+  months_without_acquisition:
+  - 2019-06
+  - 2019-07
+  - 2019-08
+  - 2020-07
+  - 2020-08
+  - 2021-05
+  - 2023-08
+  - 2024-08
+  - 2025-07
+  - 2025-08
+  path: data/raw/landsat/navimumbai
+  range:
+  - '2019-01-01'
+  - '2026-08-31'
+  sha256: per file in each <date>/scene.json
+  source: https://planetarycomputer.microsoft.com/api/stac/v1/collections/landsat-c2-l2
 osm/dholera:
   licence: ODbL (c) OpenStreetMap contributors
   path: data/raw/osm/dholera
@@ -170,6 +241,42 @@ osm/navimumbai:
   - '2025-01-01'
   - '2026-01-01'
   source: https://api.ohsome.org/v1/elements/geometry
+sentinel1/dholera:
+  acquisitions: 92
+  failed: []
+  licence: CC-BY-4.0 (RTC product); Copernicus Sentinel data terms
+  months_without_acquisition: []
+  path: data/raw/sentinel1/dholera
+  range:
+  - '2019-01-01'
+  - '2026-08-31'
+  sha256: per file in each <date>/scene.json
+  source: https://planetarycomputer.microsoft.com/api/stac/v1/collections/sentinel-1-rtc
+sentinel1/hasdeo:
+  acquisitions: 92
+  failed: []
+  licence: CC-BY-4.0 (RTC product); Copernicus Sentinel data terms
+  months_without_acquisition: []
+  path: data/raw/sentinel1/hasdeo
+  range:
+  - '2019-01-01'
+  - '2026-08-31'
+  sha256: per file in each <date>/scene.json
+  source: https://planetarycomputer.microsoft.com/api/stac/v1/collections/sentinel-1-rtc
+sentinel1/navimumbai:
+  acquisitions: 89
+  failed: []
+  licence: CC-BY-4.0 (RTC product); Copernicus Sentinel data terms
+  months_without_acquisition:
+  - 2019-02
+  - 2019-03
+  - 2019-04
+  path: data/raw/sentinel1/navimumbai
+  range:
+  - '2019-01-01'
+  - '2026-08-31'
+  sha256: per file in each <date>/scene.json
+  source: https://planetarycomputer.microsoft.com/api/stac/v1/collections/sentinel-1-rtc
 sentinel2/dholera:
   acquisitions: 79
   failed: []
@@ -189,6 +296,61 @@ sentinel2/dholera:
   - 2026-07
   - 2026-08
   path: data/raw/sentinel2/dholera
+  range:
+  - '2019-01-01'
+  - '2026-08-31'
+  sha256: per file in each <date>/scene.json
+  source: https://earth-search.aws.element84.com/v1/collections/sentinel-2-c1-l2a
+sentinel2/hasdeo:
+  acquisitions: 77
+  failed: []
+  licence: Copernicus Sentinel data terms (free, attribution)
+  months_without_acquisition:
+  - 2019-07
+  - 2019-08
+  - 2019-09
+  - 2020-07
+  - 2020-08
+  - 2021-06
+  - 2021-08
+  - 2022-07
+  - 2022-08
+  - 2023-07
+  - 2024-07
+  - 2024-08
+  - 2025-07
+  - 2026-07
+  - 2026-08
+  path: data/raw/sentinel2/hasdeo
+  range:
+  - '2019-01-01'
+  - '2026-08-31'
+  sha256: per file in each <date>/scene.json
+  source: https://earth-search.aws.element84.com/v1/collections/sentinel-2-c1-l2a
+sentinel2/navimumbai:
+  acquisitions: 74
+  failed: []
+  licence: Copernicus Sentinel data terms (free, attribution)
+  months_without_acquisition:
+  - 2019-07
+  - 2019-08
+  - 2019-09
+  - 2020-08
+  - 2021-07
+  - 2021-08
+  - 2021-09
+  - 2022-07
+  - 2022-08
+  - 2022-09
+  - 2023-07
+  - 2024-07
+  - 2024-08
+  - 2025-06
+  - 2025-07
+  - 2025-08
+  - 2026-07
+  - 2026-08
+  path: data/raw/sentinel2/navimumbai
   range:
   - '2019-01-01'
   - '2026-08-31'

@@ -6,6 +6,14 @@ georsclip-vit-b-32:
     ckpt/RS5M_ViT-B-32.pt: 129bafaa6a097b8be52e2babf27d24f0a934dae919201e538dc698611bd1ea01
   source: https://huggingface.co/Zilun/GeoRSCLIP
   version: 4920188e6eba4e711ef9848cfd7cb77e874ee33f
+openai-clip-vit-b-32:
+  licence: apache-2.0
+  path: models/openai-clip-vit-b-32
+  role: generic CLIP baseline (M1; base of GeoRSCLIP/RemoteCLIP)
+  sha256:
+    open_clip_model.safetensors: e6d1bd7789aa45192b3bf90570a789b478bae1b74ebcce7eddd908e83a2b7c31
+  source: https://huggingface.co/timm/vit_base_patch32_clip_224.openai
+  version: a6f597a30f7b82c51704746581f9a4e41421e878
 prithvi-eo-2.0-300m-tl:
   licence: apache-2.0
   path: models/prithvi-eo-2.0-300m-tl

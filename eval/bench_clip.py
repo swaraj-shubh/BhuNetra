@@ -50,7 +50,7 @@ REPORTS = paths.root / "eval" / "reports"
 
 def load_candidate(name: str, spec: dict):
     """Build (model, preprocess, tokenizer) from local files only (DESIGN.md §2.8)."""
-    d = paths.models / name
+    d = paths.models / spec.get("dir", name)
     if "arch" in spec:
         model, _, preprocess = open_clip.create_model_and_transforms(
             spec["arch"], pretrained=str(d / spec["file"])

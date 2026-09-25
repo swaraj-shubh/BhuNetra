@@ -2,7 +2,7 @@
 # Never load by hub id at runtime - always models/<name>/<file>.
 text_vec:            # active text->image model: provisional pick from M1 part 1 (ADR 0002); licence VERIFY
   name: georsclip-vit-b-32
-  arch: ViT-B-32
+  arch: ViT-B-32-quickgelu   # OpenAI-derived: QuickGELU (M1 rerun: top-1 0.53 -> 0.67)
   file: ckpt/RS5M_ViT-B-32.pt
   dim: 512           # VERIFY against the model card
   templates: ["a satellite image of {}.", "an aerial photograph of {}.", "{}"]
@@ -13,9 +13,15 @@ downloads:           # staged by scripts/stage_data.py models
   rs-m-clip: {repo: joaodaniel/RS-M-CLIP, role: text_vec candidate (M1), allow: [open_clip_model.safetensors, "*.json", "*.model", "*.txt", README.md]}
   prithvi-eo-2.0-300m-tl: {repo: ibm-nasa-geospatial/Prithvi-EO-2.0-300M-TL, role: eo_vec encoder (M7), allow: ["*.pt", "*.py", "*.json", "*.yaml", README.md]}
   xlm-roberta-base: {repo: FacebookAI/xlm-roberta-base, role: RS-M-CLIP text-tower config + tokenizer (no weights), allow: [config.json, tokenizer.json, tokenizer_config.json, sentencepiece.bpe.model]}
+  openai-clip-vit-b-32: {repo: timm/vit_base_patch32_clip_224.openai, role: generic CLIP baseline (M1; base of GeoRSCLIP/RemoteCLIP), allow: [open_clip_model.safetensors, open_clip_config.json, README.md]}
   terramind-1.0-base: {repo: ibm-esa-geospatial/TerraMind-1.0-base, role: SAR/multimodal encoder candidate (benchmark only), allow: ["*.pt", "*.py", "*.json", "*.yaml", README.md]}
 
 text_vec_candidates:   # M1 go/no-go (eval/bench_clip.py). All load from models/<name>/ only.
   remoteclip-vit-b-32: {arch: ViT-B-32, file: RemoteCLIP-ViT-B-32.pt}
   georsclip-vit-b-32: {arch: ViT-B-32, file: ckpt/RS5M_ViT-B-32.pt}
+  openai-clip-vit-b-32: {arch: ViT-B-32-quickgelu, file: open_clip_model.safetensors}
+  # OpenAI CLIP uses QuickGELU; open_clip's plain "ViT-B-32" uses GELU. GeoRSCLIP/RemoteCLIP are OpenAI fine-tunes,
+  # so benchmark both activations and keep whichever the numbers support (VERIFY on each training config).
+  georsclip-vit-b-32-quickgelu: {dir: georsclip-vit-b-32, arch: ViT-B-32-quickgelu, file: ckpt/RS5M_ViT-B-32.pt}
+  remoteclip-vit-b-32-quickgelu: {dir: remoteclip-vit-b-32, arch: ViT-B-32-quickgelu, file: RemoteCLIP-ViT-B-32.pt}
   rs-m-clip: {open_clip_config: open_clip_config.json, file: open_clip_model.safetensors, hf_text_dir: xlm-roberta-base}
