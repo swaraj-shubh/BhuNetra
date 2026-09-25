@@ -9,20 +9,19 @@ OFFLINE := $(COMPOSE) -f docker/compose.offline.yaml
         audit-verify bench-clip eval report verify-weights stats
 
 up:
-	$(COMPOSE) up -d --build
+	$(COMPOSE) up -d --build --wait
 
 down:
 	$(COMPOSE) down
 
 up-offline:            ## the proof run: app network has no external route
-	$(OFFLINE) up -d
+	$(OFFLINE) up -d --wait
 	$(MAKE) offline-check
 
 offline-check:         ## /stats answers from inside; the internet does not
 	$(OFFLINE) exec -T api python -c "import urllib.request as u; print(u.urlopen('http://localhost:8000/stats').status)"
-	$(OFFLINE) exec -T api python -c "import urllib.request as u, sys; \
-	  sys.exit('NETWORK REACHABLE - not offline') if u.urlopen('https://huggingface.co', timeout=5) else None" \
-	  && exit 1 || echo "offline OK: no external route"
+	$(OFFLINE) exec -T api python -c "import urllib.request as u; u.urlopen('https://huggingface.co', timeout=5)" \
+	  && { echo "NETWORK REACHABLE - not offline"; exit 1; } || echo "offline OK: no external route"
 
 test:
 	$(RUN) pytest -q

@@ -42,6 +42,10 @@ services:
     depends_on:
       db: {condition: service_healthy}
       qdrant: {condition: service_started}
+    healthcheck:   # lets `up --wait` block until uvicorn answers (make offline-check raced it)
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:8000/stats')"]
+      interval: 5s
+      retries: 30
     ports: ["127.0.0.1:8000:8000"]
     networks: [app]
 

@@ -1,0 +1,16 @@
+# DESIGN.md §6: `make lint` + `make test` on every push/PR. Tests use synthetic fixtures only (no data/, no models/).
+name: ci
+on: [push, pull_request]
+
+jobs:
+  lint-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      # Linux resolves CUDA torch (~4 GB of wheels); add a CPU-only CI extra if the job gets too slow
+      - run: uv sync --frozen
+      - run: make lint
+      - run: make test

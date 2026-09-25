@@ -197,10 +197,27 @@ landsat/navimumbai:
   sha256: per file in each <date>/scene.json
   source: https://planetarycomputer.microsoft.com/api/stac/v1/collections/landsat-c2-l2
 osm/dholera:
+  files:
+  - roads_2019-01-01.geojson
+  - roads_2020-01-01.geojson
+  - roads_2021-01-01.geojson
+  - roads_2022-01-01.geojson
+  - roads_2023-01-01.geojson
+  - roads_2024-01-01.geojson
+  - roads_2025-01-01.geojson
+  - roads_2026-01-01.geojson
   licence: ODbL (c) OpenStreetMap contributors
   path: data/raw/osm/dholera
   role: road-change labels
-  sha256: {}
+  sha256:
+    roads_2019-01-01.geojson: 38f44fcdd175c010d98b34de09b2b0caab0aef31f4e4ca9c6e6b38ad33349dc3
+    roads_2020-01-01.geojson: 276fe0ce4aaf305d9e4795a6f2fdad760160578266cc20969d7ec643953b8e60
+    roads_2021-01-01.geojson: 7a8515b9150ea8acee1af5cb3a10d23832984a90a7a247062f8410e023858dc0
+    roads_2022-01-01.geojson: f4909b5de0f855d351518753f800ecc3c142a8e5f768ff2f2bfbd8502149da17
+    roads_2023-01-01.geojson: f0b5a37beb73e470a32850d358a7eec39388a1d0ec1572684c9b0736b1e695a1
+    roads_2024-01-01.geojson: 436ffb079992eeaadf2de4a85c52e894526ff8e00bc1c7de47798d73006bc3a5
+    roads_2025-01-01.geojson: 0654b6209477c63b15dc6a212ce13fb2df6289561da73b6022e31c02c76f98ce
+    roads_2026-01-01.geojson: b7caa77001ab9a8da3f5e8b0b682f31be057e691a21fbb9e64a1272f1f7d8acd
   snapshots:
   - '2019-01-01'
   - '2020-01-01'
@@ -210,12 +227,29 @@ osm/dholera:
   - '2024-01-01'
   - '2025-01-01'
   - '2026-01-01'
-  source: https://api.ohsome.org/v1/elements/geometry
+  source: https://overpass-api.de/api/interpreter (attic [date:] queries)
 osm/hasdeo:
+  files:
+  - roads_2019-01-01.geojson
+  - roads_2020-01-01.geojson
+  - roads_2021-01-01.geojson
+  - roads_2022-01-01.geojson
+  - roads_2023-01-01.geojson
+  - roads_2024-01-01.geojson
+  - roads_2025-01-01.geojson
+  - roads_2026-01-01.geojson
   licence: ODbL (c) OpenStreetMap contributors
   path: data/raw/osm/hasdeo
   role: road-change labels
-  sha256: {}
+  sha256:
+    roads_2019-01-01.geojson: 40c7bb31d9cf7b4139e7df739f7467eaf4f3a3b2966fb05c7f991860a8b9ad87
+    roads_2020-01-01.geojson: f8feb329201bcc8694bc06f62a1f5bda9c94d4859a353b135e0f8a64ff3cda96
+    roads_2021-01-01.geojson: ddb69b9a98ba12a5baaa2e64a63f4f8bf06038a0d438adb9735e8ce2ca8ff684
+    roads_2022-01-01.geojson: 6950a8d09a222d215a49bd3fd86fa57ecc31a3181d07636ff1c3271883fae855
+    roads_2023-01-01.geojson: 485b94d7fa758a0f1df41bd32645ef1f77205ad799b9d32d486f81d87c5756a5
+    roads_2024-01-01.geojson: 328f32e8227ef7e3c061bf161eb5d00dfab19c1158165d5e9e798c3eebcef853
+    roads_2025-01-01.geojson: 93709de03b9f32f44cdb4870e62d7fed9f4444be938d7bee8e14a172c58bc5ba
+    roads_2026-01-01.geojson: 8c9f1c096810425e97333b86b530b2283696e663db64c89ee043e3c8d857412f
   snapshots:
   - '2019-01-01'
   - '2020-01-01'
@@ -225,12 +259,29 @@ osm/hasdeo:
   - '2024-01-01'
   - '2025-01-01'
   - '2026-01-01'
-  source: https://api.ohsome.org/v1/elements/geometry
+  source: https://overpass-api.de/api/interpreter (attic [date:] queries)
 osm/navimumbai:
+  files:
+  - roads_2019-01-01.geojson
+  - roads_2020-01-01.geojson
+  - roads_2021-01-01.geojson
+  - roads_2022-01-01.geojson
+  - roads_2023-01-01.geojson
+  - roads_2024-01-01.geojson
+  - roads_2025-01-01.geojson
+  - roads_2026-01-01.geojson
   licence: ODbL (c) OpenStreetMap contributors
   path: data/raw/osm/navimumbai
   role: road-change labels
-  sha256: {}
+  sha256:
+    roads_2019-01-01.geojson: e2088f1a24da194110dfcf7ae3c3c3336a81e7b6178478e22dfd786c437fd146
+    roads_2020-01-01.geojson: eed0a3b130fec03de2429e686ca0fdb1394212d9fda11185378dc47f127aa902
+    roads_2021-01-01.geojson: 2c0e09e68d17ebca2a169a54d6a2ad7c6576c87880bea3dfbeb8fef9d686728f
+    roads_2022-01-01.geojson: 9cc00fca231eadec651ec8f7582801263ee8bcefe77a1c9dc565c3adb3315fb6
+    roads_2023-01-01.geojson: 9a18ef7c250e55bdfc6f7712226559659dd6cfedc2f6ad377e896c87c5f93356
+    roads_2024-01-01.geojson: b7785716c5d2eadbbab808edd62cec84367f7885e8f8b4766aa91cbb80ab7570
+    roads_2025-01-01.geojson: d2c303af40ff96084e7ebd4127d54167af10e68f07b39622a49b998c2415cf06
+    roads_2026-01-01.geojson: 74a45803e275394571d3b7cb08bc9e559dab18aafb2f6f668d871ab6183ab933
   snapshots:
   - '2019-01-01'
   - '2020-01-01'
@@ -240,7 +291,7 @@ osm/navimumbai:
   - '2024-01-01'
   - '2025-01-01'
   - '2026-01-01'
-  source: https://api.ohsome.org/v1/elements/geometry
+  source: https://overpass-api.de/api/interpreter (attic [date:] queries)
 sentinel1/dholera:
   acquisitions: 92
   failed: []
