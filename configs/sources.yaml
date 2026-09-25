@@ -17,6 +17,8 @@ sources:
   sentinel2:   # Earth Search C1 L2A; CLD = Sen2Cor cloud probability 0-100 (20 m)
     stac: earth_search
     collection: sentinel-2-c1-l2a
+    fallback_collection: sentinel-2-l2a   # c1 lacks Jan-Nov 2022 for some tiles; offsets via ingest/stac.py band_meta
+    optional_assets: [cloud]              # CLD is not in sentinel-2-l2a
     licence: Copernicus Sentinel data terms (free, attribution)
     gsd: 10
     every: month

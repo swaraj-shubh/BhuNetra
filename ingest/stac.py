@@ -71,6 +71,20 @@ def linear_to_db_int16(linear: np.ndarray) -> np.ndarray:
     return out
 
 
+def band_meta(it, asset: str) -> tuple[float, float]:
+    """(scale, offset) to apply to an asset's DNs.
+
+    Earth Search `sentinel-2-l2a` items flagged `earthsearch:boa_offset_applied: true` already had the -1000 DN
+    BOA_ADD_OFFSET removed, yet their raster:bands still say offset -0.1. Verified 2026-09-25: the same scene is
+    exactly 1000 DN lower than in `sentinel-2-c1-l2a`. Applying -0.1 again would darken it by 0.1 (fake change).
+    """
+    rb = it.assets[asset].extra_fields.get("raster:bands", [{}])[0]
+    scale, offset = rb.get("scale", 1.0), rb.get("offset", 0.0)
+    if it.properties.get("earthsearch:boa_offset_applied"):
+        offset = 0.0
+    return scale, offset
+
+
 def item_date(it) -> str:
     return (it.properties.get("datetime") or it.properties["start_datetime"])[:10]
 
@@ -143,12 +157,15 @@ def _stage_group(source: str, src: dict, aoi: str, key: str, items, epsg: int, b
 
     bands = {}
     for asset, band in src["assets"].items():
+        if not all(asset in it.assets for it in items):
+            if asset in src.get("optional_assets", ()):
+                continue  # e.g. CLD is absent in the sentinel-2-l2a fallback; masks work without it
+            raise RuntimeError(f"asset {asset} missing")
         resampling = Resampling.nearest if band in src.get("nearest", ()) else Resampling.bilinear
-        meta = items[0].assets[asset].extra_fields.get("raster:bands", [{}])[0]
-        for it in items[1:]:
-            other = it.assets[asset].extra_fields.get("raster:bands", [{}])[0]
-            if (other.get("scale"), other.get("offset")) != (meta.get("scale"), meta.get("offset")):
-                raise RuntimeError(f"mixed scale/offset for {band}; mosaic would be wrong")
+        scale, offset = band_meta(items[0], asset)
+        if any(band_meta(it, asset) != (scale, offset) for it in items[1:]):
+            raise RuntimeError(f"mixed scale/offset for {band}; mosaic would be wrong")
+        offset_metadata = items[0].assets[asset].extra_fields.get("raster:bands", [{}])[0].get("offset", 0.0)
         mosaic = nodata = None
         for it in signed:
             with rasterio.open(it.assets[asset].href) as ds:
@@ -176,7 +193,7 @@ def _stage_group(source: str, src: dict, aoi: str, key: str, items, epsg: int, b
         if src.get("to_db"):
             # SAR: resampled/mosaicked in linear power above; stored as int16 dB*100 (halves disk, 0.01 dB steps)
             mosaic, nodata, units = linear_to_db_int16(mosaic), DB_NODATA, "dB"
-            meta = {"scale": 0.01, "offset": 0.0}
+            scale, offset = 0.01, 0.0
         path = tmp / f"{band}.tif"
         with rasterio.open(
             path,
@@ -197,8 +214,9 @@ def _stage_group(source: str, src: dict, aoi: str, key: str, items, epsg: int, b
         bands[band] = {
             "file": path.name,
             "sha256": sha256(path),
-            "scale": meta.get("scale", 1.0),
-            "offset": meta.get("offset", 0.0),
+            "scale": scale,
+            "offset": offset,  # effective (see band_meta); raw catalog value in offset_metadata
+            "offset_metadata": offset_metadata,
             "nodata": None if np.isnan(nodata) else nodata,
             "nodata_fraction": round(float(empty.mean()), 4),
             "sources": [it.assets[asset].href for it in items],
@@ -218,7 +236,7 @@ def _stage_group(source: str, src: dict, aoi: str, key: str, items, epsg: int, b
         "epsg": epsg,
         "bounds": list(bounds),
         "gsd": gsd,
-        "collection": src["collection"],
+        "collection": items[0].collection_id or src["collection"],
         "source_items": [it.id for it in items],
         "aoi_coverage": round(coverage(items, load_aoi(aoi)[1]), 4),
         "properties": {k: p[k] for k in KEEP_PROPS if k in p},
@@ -235,19 +253,18 @@ def stage_series(source: str, aoi: str, start: str, end: str, workers: int = 4) 
     src = sources["sources"][source]
     _, lonlat = load_aoi(aoi)
     client = Client.open(stac_url(source))
-    query = dict(src.get("query", {}))
-    if "max_cloud" in src:
-        query["eo:cloud_cover"] = {"lt": src["max_cloud"]}
-    search = client.search(
-        collections=[src["collection"]],
-        bbox=lonlat,
-        query=query or None,
-        datetime=None if src["every"] == "once" else f"{start}/{end}",
-    )
-    items = [i for i in search.items() if all(a in i.assets for a in src["assets"])]
+    items = _search(client, src["collection"], src, lonlat, start, end)
     if not items:
         raise RuntimeError(f"no {source} items for {aoi} {start}..{end}")
     groups = select_groups(src, items, lonlat)
+    fallback = src.get("fallback_collection")
+    if fallback and src["every"] == "month":
+        # e.g. sentinel-2-c1-l2a lacks Jan-Nov 2022 for some tiles; fill only months the primary cannot
+        missing = set(_gaps(src, groups, start, end))
+        fb = [i for i in _search(client, fallback, src, lonlat, start, end) if item_date(i)[:7] in missing]
+        extra = select_groups(src, fb, lonlat)
+        groups.update(extra)
+        log.info("  %s: filled %d of %d missing months from %s", source, len(extra), len(missing), fallback)
     epsg = tiling.aoi_epsg(lonlat)
     bounds = tiling.aoi_bounds_m(lonlat, epsg)
     log.info("%s/%s: %d items -> %d acquisitions to stage", source, aoi, len(items), len(groups))
@@ -298,6 +315,20 @@ def stage_series(source: str, aoi: str, start: str, end: str, workers: int = 4) 
         "failed": sorted(failed),
         "months_without_acquisition": _gaps(src, groups, start, end),
     }
+
+
+def _search(client, collection: str, src: dict, lonlat, start: str, end: str) -> list:
+    query = dict(src.get("query", {}))
+    if "max_cloud" in src:
+        query["eo:cloud_cover"] = {"lt": src["max_cloud"]}
+    search = client.search(
+        collections=[collection],
+        bbox=lonlat,
+        query=query or None,
+        datetime=None if src["every"] == "once" else f"{start}/{end}",
+    )
+    required = [a for a in src["assets"] if a not in src.get("optional_assets", ())]
+    return [i for i in search.items() if all(a in i.assets for a in required)]
 
 
 def _gaps(src: dict, groups: dict, start: str, end: str) -> list[str]:

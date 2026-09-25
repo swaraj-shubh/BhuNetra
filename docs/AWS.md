@@ -7,6 +7,7 @@
 | AMI | Deep Learning Base AMI with Single CUDA (Ubuntu 24.04) 20260922 · driver 595.91 · Docker 29.8 |
 | Disk | 290 GB root (gp3) |
 | Access | laptop `~/.ssh/config` host **`sih-aws`** (key `~/.ssh/sih.pem`, user `ubuntu`). **The public IP changes on every stop/start**: update `HostName` (or attach an Elastic IP). |
+| Deploy | **`bash scripts/deploy_aws.sh`**: syncs box-written `manifests/*.yaml` into a commit, resets them on the box, pushes to GitHub + box. Plain `git push aws main` is refused while staging has modified the manifests. |
 | Code | push-to-deploy: laptop remote **`aws`** → `~/sih_ps2` on the box (`receive.denyCurrentBranch updateInstead`). `git push aws main` updates the box's working tree. GitHub `origin` stays the source of truth. |
 | Jobs | `tmux` sessions on the box: `stage` (data), `bench` (M1). `ssh sih-aws tmux ls` · attach: `ssh -t sih-aws tmux attach -t stage` |
 

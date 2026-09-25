@@ -170,6 +170,30 @@ osm/navimumbai:
   - '2025-01-01'
   - '2026-01-01'
   source: https://api.ohsome.org/v1/elements/geometry
+sentinel2/dholera:
+  acquisitions: 79
+  failed: []
+  licence: Copernicus Sentinel data terms (free, attribution)
+  months_without_acquisition:
+  - 2019-09
+  - 2020-07
+  - 2020-08
+  - 2021-08
+  - 2022-07
+  - 2023-07
+  - 2023-09
+  - 2024-07
+  - 2024-08
+  - 2025-07
+  - 2025-08
+  - 2026-07
+  - 2026-08
+  path: data/raw/sentinel2/dholera
+  range:
+  - '2019-01-01'
+  - '2026-08-31'
+  sha256: per file in each <date>/scene.json
+  source: https://earth-search.aws.element84.com/v1/collections/sentinel-2-c1-l2a
 worldcover/dholera:
   acquisitions: 2
   failed: []

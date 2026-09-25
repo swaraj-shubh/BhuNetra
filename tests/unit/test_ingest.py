@@ -73,3 +73,18 @@ def test_thresholds_reject_unknown_keys():
     bad["quality"]["Q_MINN"] = 0.5  # typo must fail loudly, not be silently ignored
     with pytest.raises(ValidationError):
         Thresholds(**bad)
+
+
+def test_s2_offset_rule_ignores_stale_metadata_when_offset_already_applied():
+    from types import SimpleNamespace
+
+    from ingest.stac import band_meta
+
+    def item(applied):
+        asset = SimpleNamespace(extra_fields={"raster:bands": [{"scale": 0.0001, "offset": -0.1}]})
+        props = {} if applied is None else {"earthsearch:boa_offset_applied": applied}
+        return SimpleNamespace(assets={"red": asset}, properties=props)
+
+    assert band_meta(item(None), "red") == (0.0001, -0.1)  # c1-l2a: DNs still carry +1000
+    assert band_meta(item(False), "red") == (0.0001, -0.1)  # l2a baseline 04.00, not harmonised
+    assert band_meta(item(True), "red") == (0.0001, 0.0)  # l2a harmonised: metadata -0.1 is stale
