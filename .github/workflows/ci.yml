@@ -1,10 +1,24 @@
-# DESIGN.md §6: `make lint` + `make test` on every push/PR. Tests use synthetic fixtures only (no data/, no models/).
+# DESIGN.md §6/§11: `make lint` + `make test` on every push/PR. Unit tests use synthetic fixtures only (no data/,
+# no models/). The integration test (tests/integration) runs against the throwaway PostGIS below, with every
+# non-loopback connection blocked inside the test (the offline proof).
 name: ci
 on: [push, pull_request]
 
 jobs:
   lint-test:
     runs-on: ubuntu-latest
+    services:
+      postgis:
+        image: postgis/postgis:16-3.5
+        env:
+          POSTGRES_USER: sih
+          POSTGRES_PASSWORD: ci-only
+          POSTGRES_DB: sih_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U sih -d sih_test" --health-interval 5s --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgresql://sih:ci-only@127.0.0.1:5432/sih_test
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6

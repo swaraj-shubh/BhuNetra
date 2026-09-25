@@ -249,7 +249,7 @@ cluster:   { MIN_CLUSTER_SIZE: 10, UMAP_DIM: 20 }
 | Integration | Synthetic AOI end-to-end: ingest → event exists → `/search/text` + `/change` return it |
 | Offline | CI job runs the integration test with the network disabled |
 
-Existing: `tests/unit/test_ingest.py` (S2 scale/offset, SCL+CLD mask with dilation, tile size at 10/1/30 m, tile_id stability and shared footprints, S1 dB round-trip, strict threshold config).
+Existing: `tests/unit/test_ingest.py` (S2 scale/offset, SCL+CLD mask with dilation, tile size at 10/1/30 m, tile_id stability and shared footprints, S1 dB round-trip, strict threshold config). Also `test_quality.py` (q formula, valid_frac/cloud_near, sha256-checked scene load), `test_composites.py` (IMD seasons, median, q gating), `test_audit.py` (chain verifies; editing/deleting a row breaks it at that seq), and **`tests/integration/test_pipeline.py`** (synthetic AOI → ingest → PostGIS/Qdrant → `/search/text`, idempotent rerun, reconcile, network blocked; needs `TEST_DATABASE_URL` to a throwaway `*test*` DB, provided in CI).
 
 ---
 
