@@ -7,6 +7,7 @@ import io
 import json
 import shutil
 import time
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import rasterio
@@ -25,7 +26,21 @@ from ingest.standardise import rgb_quicklook
 
 LATENCY_MS: dict[str, float] = {}  # last measured, per route (reported by /stats)
 
-app = FastAPI(title="SIH26227 EO archive")
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    """Load CLIP and hash its weights once at startup: a cold first query took 26 s (offline run, 2026-09-26)."""
+    from features import embed_clip
+
+    try:
+        embed_clip.embed_text("warm-up")
+        embed_clip.version()
+    except FileNotFoundError:  # no weights (CI, laptop without models/): /stats still works, search will 500
+        pass
+    yield
+
+
+app = FastAPI(title="SIH26227 EO archive", lifespan=lifespan)
 
 
 def _dir_bytes(p: Path) -> int:

@@ -113,6 +113,7 @@ These are defined in the `Makefile` (create them in M0 if missing; keep this tab
 | Command | Does |
 |---|---|
 | `make up` / `make down` | Start/stop the Compose stack (db, qdrant, api, worker, tiles, web) |
+| `make build` | Rebuild the api image (with the web bundle) after code changes. Online. `make up` no longer rebuilds |
 | `make up-offline` | Start with external networking disabled (the proof run) |
 | `make test` | `pytest -q` (unit + integration on synthetic fixtures) |
 | `make lint` | `ruff check . && ruff format --check . && mypy change query governance` |

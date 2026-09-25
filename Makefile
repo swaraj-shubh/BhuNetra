@@ -8,11 +8,14 @@ OFFLINE := $(COMPOSE) -f docker/compose.offline.yaml
 -include docker/.env
 HOST_ENV := DATABASE_URL=postgresql://$(or $(POSTGRES_USER),sih):$(POSTGRES_PASSWORD)@127.0.0.1:5432/$(or $(POSTGRES_DB),sih)             QDRANT_URL=http://127.0.0.1:6333
 
-.PHONY: up down up-offline offline-check test lint db-migrate stage ingest ingest-scene reconcile \
+.PHONY: up build down up-offline offline-check test lint db-migrate stage ingest ingest-scene reconcile \
         audit-verify bench-clip eval report verify-weights stats
 
-up:
-	$(COMPOSE) up -d --build --wait
+up:                    ## start (no rebuild: exporting the CUDA image takes ~10 min even when cached)
+	$(COMPOSE) up -d --wait
+
+build:                 ## rebuild the api image after code/web changes (ONLINE)
+	$(COMPOSE) build
 
 down:
 	$(COMPOSE) down
