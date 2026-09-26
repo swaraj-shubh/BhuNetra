@@ -54,6 +54,7 @@ export default function App() {
   const [tab, setTab] = useState<"search" | "review">("search");
   const [queryId, setQueryId] = useState<string | null>(null);
   const [fb, setFb] = useState<Record<string, string>>({});
+  const [apiKey, setApiKey] = useState(() => { try { return localStorage.getItem("apikey") ?? ""; } catch { return ""; } });
 
   useEffect(() => {
     const m = new maplibregl.Map({
@@ -172,6 +173,20 @@ export default function App() {
     setStatus(`re-ranked with your feedback (${Object.keys(body.feedback ?? {}).length} decisions; rejected sites removed)`);
   }
 
+  async function exportQuery() {
+    if (!queryId) return;
+    setStatus("exporting…");
+    const r = await fetch("/export", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ query_id: queryId }) });
+    if (!r.ok) return setStatus(`export error ${r.status}: ${await r.text()}`);
+    const url = URL.createObjectURL(await r.blob());
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = (r.headers.get("Content-Disposition")?.match(/filename="(.+)"/) ?? [])[1] ?? "export.zip";
+    a.click();
+    URL.revokeObjectURL(url);
+    setStatus("signed export downloaded (Ed25519; audited)");
+  }
+
   const sel = sites.find((s) => s.tile_id === selected);
   const understood = parsed && [
     parsed.change ? `change: ${parsed.change_types.join("/") || "any type"}` : null,
@@ -184,6 +199,8 @@ export default function App() {
     <div className="app">
       <aside>
         <h1>EO Archive</h1>
+        <input className="apikey" type="password" value={apiKey} placeholder="API key (if auth is enabled)" aria-label="API key"
+          onChange={(e) => { setApiKey(e.target.value); try { localStorage.setItem("apikey", e.target.value); } catch { /* ignore */ } }} />
         <div className="tabs" role="tablist">
           <button role="tab" aria-selected={tab === "search"} className={tab === "search" ? "on" : ""} onClick={() => setTab("search")}>Search</button>
           <button role="tab" aria-selected={tab === "review"} className={tab === "review" ? "on" : ""} onClick={() => setTab("review")}>Review queue</button>
@@ -199,6 +216,7 @@ export default function App() {
           <button type="submit">Search</button>
         </form>
         <p className="status">{status}</p>
+        {queryId && sites.length > 0 && <button onClick={exportQuery}>Export signed package</button>}
         {understood && <p className="note">Understood: {understood}</p>}
         {warnings.map((w) => (
           <p key={w} className="note warn">{WARNING_TEXT[w] ?? w}</p>

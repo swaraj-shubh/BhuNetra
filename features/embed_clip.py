@@ -19,6 +19,11 @@ WEIGHTS = paths.models / CFG["name"] / CFG["file"]
 def _load():
     if not WEIGHTS.exists():
         raise FileNotFoundError(f"{WEIGHTS} missing; run: python scripts/stage_data.py models")
+    from governance.model_registry import (
+        verified,  # M8: refuse weights whose sha256 differs from the manifest
+    )
+
+    verified(CFG["name"], CFG["file"])
     # same loader as eval/bench_clip.py, so production matches what M1 measured
     model, _, preprocess = open_clip.create_model_and_transforms(CFG["arch"], pretrained=str(WEIGHTS))
     model.to(DEVICE).eval()

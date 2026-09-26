@@ -75,8 +75,5 @@ eval:                  ## (M10)
 report:                ## (M10)
 	@echo "not implemented yet (M10)"; exit 1
 
-verify-weights:
-	$(RUN) python -c "import yaml, sys; from pathlib import Path; from ingest.validate import sha256; \
-	  m = yaml.safe_load(open('manifests/models.yaml', encoding='utf-8')); \
-	  bad = [f'{n}/{f}' for n, e in m.items() for f, h in e['sha256'].items() if sha256(Path(e['path']) / f) != h]; \
-	  print('all weights verified' if not bad else f'MISMATCH: {bad}'); sys.exit(1 if bad else 0)"
+verify-weights:        ## every model file vs manifests/models.yaml (governance/model_registry.py)
+	$(RUN) python -c "import json, sys; from governance.model_registry import verify_all; r = verify_all(); print(json.dumps(r, indent=1)); sys.exit(any(v != 'ok' for v in r.values()))"

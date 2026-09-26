@@ -95,6 +95,20 @@ def main() -> None:
         else None
     )
     ev_status = c.get(f"/events/{ev[0]['event_id']}").json()["analyst_status"] if ev else None
+    # M8: signed export verifies; tampering one file is detected; audit chain verifiable over HTTP
+    import io
+    import zipfile
+
+    zbytes = c.post("/export", json={"event_ids": [e["event_id"] for e in ev]}).content
+    ok = c.post("/export/verify", content=zbytes).json()
+    zin = zipfile.ZipFile(io.BytesIO(zbytes))
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zout:
+        for n in zin.namelist():
+            b = zin.read(n)
+            zout.writestr(n, b.replace(b"construction", b"clearance") if n == "events.geojson" else b)
+    bad = c.post("/export/verify", content=buf.getvalue()).json()
+    audit_http = c.get("/audit/verify").json()
     with db.engine().connect() as conn:
         broken_after_fb = audit.verify(audit.load(conn))
         n_audit_after_fb = len(audit.load(conn))
@@ -121,6 +135,9 @@ def main() -> None:
                 "fb_event_status": ev_status,
                 "audit_broken_after_fb": broken_after_fb,
                 "audit_entries_after_fb": n_audit_after_fb,
+                "export_verify": ok,
+                "export_tampered_verify": bad,
+                "audit_http": audit_http,
             }
         )
     )

@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import rasterio
-from fastapi import FastAPI, HTTPException, Response
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.staticfiles import StaticFiles
 from PIL import Image
 from pydantic import BaseModel, Field
@@ -24,6 +24,7 @@ from ingest import tiling
 from ingest.standardise import rgb_quicklook
 
 LATENCY_MS: dict[str, float] = {}  # last measured, per route (reported by /stats)
+WEIGHT_ERROR: list[str] = []  # set at startup when the text model fails verification (M8)
 
 
 @asynccontextmanager
@@ -36,11 +37,14 @@ async def lifespan(_: FastAPI):
         embed_clip.version()
     except FileNotFoundError:  # no weights (CI, laptop without models/): /stats still works, search will 500
         pass
+    except Exception as e:  # noqa: BLE001 - e.g. WeightMismatch: keep serving /stats, which reports it
+        WEIGHT_ERROR.append(str(e))
     yield
 
 
 app = FastAPI(title="SIH26227 EO archive", lifespan=lifespan)
 
+from api.auth import ADMIN, ANALYST, VIEWER
 from api.label import router as label_router
 
 app.include_router(label_router)
@@ -83,6 +87,10 @@ def stats() -> dict:
             ),
         },
         "latency_ms": LATENCY_MS or None,
+        "auth": "enabled"
+        if __import__("governance.rbac", fromlist=["load"]).load() is not None
+        else "disabled (dev)",
+        "weights_error": WEIGHT_ERROR or None,
         "staging_report": json.loads(report.read_text(encoding="utf-8")) if report.exists() else None,
     }
 
@@ -98,7 +106,7 @@ class TextQuery(BaseModel):
 
 
 @app.post("/search/text")
-def search_text(q: TextQuery) -> dict:
+def search_text(q: TextQuery, user: dict = VIEWER) -> dict:
     """Parse -> semantic | change | spatial branches -> fusion -> unique sites (M4). Stored as a query for /feedback."""
     from query import parser, retrieve
 
@@ -131,11 +139,13 @@ class Feedback(BaseModel):
 
 
 @app.post("/feedback")
-def feedback(f: Feedback) -> dict:
+def feedback(f: Feedback, user: dict = ANALYST) -> dict:
     """Store the decision (+ audit, same transaction). Events get analyst_status. With query_id: Rocchio re-rank,
     rejected sites removed (DESIGN.md §3 review loop)."""
     from governance import audit
 
+    if user["auth"]:  # authenticated identity wins over the self-declared actor
+        f = f.model_copy(update={"actor": user["name"]})
     with db.engine().begin() as conn:
         if f.target.type == "event":
             n = conn.execute(
@@ -249,6 +259,7 @@ def change(
     t2: str | None = None,
     type: str | None = None,  # contract parameter name (DESIGN.md §12) shadows the builtin here only
     min_conf: float = T.events.OPERATING_CONF,
+    user: dict = VIEWER,
 ) -> dict:
     """Stored events only: confidence is fixed at ingest (§2.2). Below OPERATING_CONF stays hidden unless asked."""
     if type is not None and type not in CHANGE_TYPES:
@@ -278,7 +289,7 @@ def change(
 
 
 @app.get("/events/{event_id}")
-def event(event_id: str) -> dict:
+def event(event_id: str, user: dict = VIEWER) -> dict:
     with db.engine().connect() as conn:
         r = (
             conn.execute(
@@ -320,5 +331,174 @@ def _grid(aoi: str) -> tuple[tuple[float, float, float, float], int]:
 
 
 # Workbench (web/, built into dist/ by docker/Dockerfile.api). Mounted last so API routes win.
+
+
+class IngestRequest(BaseModel):
+    path: str = Field(
+        min_length=1, max_length=500
+    )  # staged folder or GeoTIFF/COG under data/ (worker validates)
+    aoi: str
+
+
+@app.post("/ingest")
+def ingest_job(req: IngestRequest, user: dict = ADMIN) -> dict:
+    """Queue an incremental ingest (M9). The worker service does the work (DESIGN.md §2.1)."""
+    from governance import audit
+
+    if req.aoi not in aois:
+        raise HTTPException(422, f"unknown AOI {req.aoi}")
+    with db.engine().begin() as conn:
+        job_id = conn.execute(
+            text(
+                "INSERT INTO jobs (kind, params) VALUES ('ingest_scene', CAST(:p AS jsonb)) RETURNING job_id"
+            ),
+            {"p": req.model_dump_json()},
+        ).scalar()
+        audit.append(conn, user["name"], "ingest.queued", {"job_id": str(job_id), **req.model_dump()})
+    return {"job_id": str(job_id)}
+
+
+@app.get("/jobs/{job_id}")
+def job(job_id: str, user: dict = VIEWER) -> dict:
+    with db.engine().connect() as conn:
+        r = (
+            conn.execute(
+                text(
+                    "SELECT job_id::text, kind, params, status, timings, error, created_ts, finished_ts FROM jobs "
+                    "WHERE job_id::text = :i"
+                ),
+                {"i": job_id},
+            )
+            .mappings()
+            .first()
+        )
+    if r is None:
+        raise HTTPException(404)
+    return {k: (str(v) if k.endswith("_ts") and v else v) for k, v in r.items()}
+
+
+class ExportRequest(BaseModel):
+    event_ids: list[str] | None = Field(default=None, max_length=5000)
+    query_id: str | None = None
+    format: str = Field(default="geojson", pattern="^(geojson|gpkg)$")
+
+
+def _export_key():
+    from governance import sign
+
+    return sign.load_or_create_key(paths.data / "keys" / "export_ed25519.pem")
+
+
+@app.post("/export")
+def export(req: ExportRequest, user: dict = ANALYST) -> Response:
+    """Ed25519-signed zip: events.geojson (+ sites.geojson for a query) + provenance + manifest (DESIGN.md §3)."""
+    import zipfile
+
+    from governance import audit, sign
+
+    if req.format == "gpkg":
+        raise HTTPException(422, "gpkg not implemented yet (no GDAL vector driver in the image); use geojson")
+    if not (req.event_ids or req.query_id):
+        raise HTTPException(422, "give event_ids or query_id")
+    files: dict[str, bytes] = {}
+    ids = list(req.event_ids or [])
+    if req.query_id:
+        sites = rerank(req.query_id)["sites"]
+        files["sites.geojson"] = json.dumps(
+            {
+                "type": "FeatureCollection",
+                "features": [
+                    {
+                        "type": "Feature",
+                        "geometry": s["geometry"],
+                        "properties": {k: v for k, v in s.items() if k != "geometry"},
+                    }
+                    for s in sites
+                ],
+            }
+        ).encode()
+        ids += [e["event_id"] for s in sites for e in s["events"]]
+    with db.engine().connect() as conn:
+        rows = (
+            conn.execute(
+                text(
+                    f"SELECT {EVENT_COLS}, e.evidence FROM change_events e JOIN tiles t USING (tile_id) WHERE e.event_id = ANY(:i)"
+                ),
+                {"i": sorted(set(ids))},
+            )
+            .mappings()
+            .all()
+        )
+    evs = [_event(r) | {"evidence": r["evidence"]} for r in rows]
+    files["events.geojson"] = json.dumps(
+        {
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "geometry": e["geometry"],
+                    "properties": {k: v for k, v in e.items() if k not in ("geometry", "evidence")},
+                }
+                for e in evs
+            ],
+        }
+    ).encode()
+    files["provenance.json"] = json.dumps(
+        {e["event_id"]: {"provenance": e["provenance"], "evidence": e["evidence"]} for e in evs}
+    ).encode()
+    export_id = str(db.uuid7())
+    pkg = sign.build_package(
+        files,
+        _export_key(),
+        meta={"export_id": export_id, "actor": user["name"], "query_id": req.query_id, "n_events": len(evs)},
+    )
+    with db.engine().begin() as conn:
+        audit.append(
+            conn,
+            user["name"],
+            "export",
+            {
+                "export_id": export_id,
+                "manifest_sha256": sign.sha256_hex(pkg["manifest.json"]),
+                "n_events": len(evs),
+                "query_id": req.query_id,
+            },
+        )
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        for name, b in pkg.items():
+            z.writestr(name, b)
+    return Response(
+        buf.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="export_{export_id}.zip"'},
+    )
+
+
+@app.post("/export/verify")
+async def export_verify(request: Request, user: dict = VIEWER) -> dict:
+    """Upload a zip (raw body); verified against THIS server's export key (origin + integrity)."""
+    import zipfile
+
+    from governance import sign
+
+    try:
+        with zipfile.ZipFile(io.BytesIO(await request.body())) as z:
+            pkg = {n: z.read(n) for n in z.namelist()}
+    except zipfile.BadZipFile as e:
+        raise HTTPException(422, "not a zip") from e
+    return sign.verify_package(pkg, trusted_public_pem=sign.public_pem(_export_key()))
+
+
+@app.get("/audit/verify")
+def audit_verify(user: dict = VIEWER) -> dict:
+    from governance import audit
+
+    with db.engine().connect() as conn:
+        entries = audit.load(conn)
+    broken = audit.verify(entries)
+    return {"ok": broken is None, "entries": len(entries), "broken_at": broken}
+
+
 if (paths.web / "dist").is_dir():
     app.mount("/", StaticFiles(directory=paths.web / "dist", html=True), name="web")

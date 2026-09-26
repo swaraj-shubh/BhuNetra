@@ -17,12 +17,12 @@ def _imports(pkg: str) -> set[str]:
     return found & TOP_LEVEL
 
 
-def test_api_image_copies_every_package_the_api_imports():
+def test_api_image_copies_every_package_the_services_import():
     """The api image COPYs packages one by one; a missing one only fails at request time (M4: query/)."""
     copied = set(
         re.findall(r"^COPY (\w+) \1$", (REPO / "docker" / "Dockerfile.api").read_text(), re.MULTILINE)
     )
-    needed, todo = set(), {"api"}
+    needed, todo = set(), {"api", "worker"}  # both services run this image
     while todo:  # transitive closure over our own packages
         pkg = todo.pop()
         needed.add(pkg)

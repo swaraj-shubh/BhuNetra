@@ -192,4 +192,11 @@ def test_synthetic_aoi_end_to_end(tmp_path):
     assert len(out["fb_rejected"]) == 2 and not set(out["fb_rejected"]) & set(out["fb_after"])
     assert out["fb_after"] != out["fb_before"]
     assert out["fb_event"]["recorded"] is True and out["fb_event_status"] == "rejected"
-    assert out["audit_broken_after_fb"] is None and out["audit_entries_after_fb"] == out["audit_entries"] + 3
+    # 3 feedback entries + 1 export entry
+    assert out["audit_broken_after_fb"] is None and out["audit_entries_after_fb"] == out["audit_entries"] + 4
+
+    # M8 exit: signature verifies; tampering detected; audit chain verifiable over the API
+    assert out["export_verify"] == {"ok": True, "problems": []}
+    assert out["export_tampered_verify"]["ok"] is False
+    assert any("events.geojson" in p for p in out["export_tampered_verify"]["problems"])
+    assert out["audit_http"]["ok"] is True and out["audit_http"]["entries"] == out["audit_entries_after_fb"]

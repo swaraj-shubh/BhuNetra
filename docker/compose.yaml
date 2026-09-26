@@ -54,6 +54,25 @@ services:
     ports: ["127.0.0.1:8000:8000"]
     networks: [app]
 
+  worker:   # M9 job queue: incremental ingest; same image as the api, no published ports
+    image: sih26227-api
+    command: ["python", "-m", "worker.jobs"]
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-sih}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-sih}
+      QDRANT_URL: http://qdrant:6333
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+      SIH_ROOT: /app
+    volumes:
+      - ../data:/app/data              # the worker stages organiser files into data/raw (staging exception, §2.12)
+      - ../models:/app/models:ro
+      - ../manifests:/app/manifests
+    depends_on:
+      db: {condition: service_healthy}
+      qdrant: {condition: service_started}
+      api: {condition: service_healthy}
+    networks: [app]
+
 networks:
   app: {}
 

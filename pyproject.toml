@@ -26,6 +26,7 @@ dependencies = [
     "psutil>=7.2.2",
     "sqlalchemy>=2.1.1",
     "pg8000>=1.31.5",
+    "cryptography>=50.0.1",
 ]
 
 [dependency-groups]

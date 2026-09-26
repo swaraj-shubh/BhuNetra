@@ -13,6 +13,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
+from api.auth import ANALYST
 from configs.settings import paths
 from governance import lineage
 
@@ -91,11 +92,13 @@ def view(event_id: str) -> FileResponse:
 
 
 @router.post("/{event_id}")
-def save(event_id: str, lab: Label) -> dict:
+def save(event_id: str, lab: Label, user: dict = ANALYST) -> dict:
     if not EVENT_ID.match(event_id) or event_id not in {r["event_id"] for r in _csv(SAMPLE)}:
         raise HTTPException(404, "not in the M5 sample")
     if lab.true_type is not None and lab.true_type not in TYPES:
         raise HTTPException(422, f"true_type must be one of {TYPES}")
+    if user["auth"]:
+        lab = lab.model_copy(update={"labeller": user["name"]})
     rec = {"event_id": event_id, **lab.model_dump(), "ts": lineage.now_ts()}
     HUMAN.parent.mkdir(parents=True, exist_ok=True)
     with open(HUMAN, "a", encoding="utf-8") as f:

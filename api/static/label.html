@@ -34,6 +34,7 @@
     <option value="heldout">Held-out (blind)</option>
   </select>
   <input id="who" placeholder="your name" aria-label="Labeller name" size="12">
+  <input id="key" type="password" placeholder="API key (if enabled)" aria-label="API key" size="14">
   <span id="count" class="muted"></span>
   <div class="progress" aria-hidden="true"><div id="bar" style="width:0"></div></div>
   <button id="prev">← prev</button><button id="next">next →</button>
@@ -66,7 +67,8 @@
 <script>
 const $ = (id) => document.getElementById(id);
 let items = [], i = 0, real = null, ttype = null;
-try { $("who").value = localStorage.getItem("labeller") || ""; } catch (e) {}
+try { $("who").value = localStorage.getItem("labeller") || ""; $("key").value = localStorage.getItem("apikey") || ""; } catch (e) {}
+$("key").onchange = () => { try { localStorage.setItem("apikey", $("key").value); } catch (e) {} };
 
 function pick(group, v) { document.querySelectorAll(`#${group} button`).forEach(b => b.classList.toggle("sel", b.dataset.v === v)); }
 function setReal(v) { real = v; pick("real", v); if (v !== "yes") { ttype = null; pick("type", null); } }
@@ -101,7 +103,8 @@ async function save() {
   if (real === "yes" && !ttype) { $("msg").textContent = "choose the change type"; return; }
   try { localStorage.setItem("labeller", who); } catch (e) {}
   const it = items[i];
-  const r = await fetch(`/label/${it.event_id}`, { method: "POST", headers: { "Content-Type": "application/json" },
+  let key = ""; try { key = localStorage.getItem("apikey") || ""; } catch (e) {}
+  const r = await fetch(`/label/${it.event_id}`, { method: "POST", headers: { "Content-Type": "application/json", ...(key ? { "X-API-Key": key } : {}) },
     body: JSON.stringify({ real, true_type: real === "yes" ? ttype : null, note: $("note").value, labeller: who }) });
   if (!r.ok) { $("msg").textContent = `error ${r.status}: ${await r.text()}`; return; }
   it.human = await r.json();
