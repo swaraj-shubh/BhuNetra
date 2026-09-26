@@ -70,7 +70,7 @@ def build(aoi: str, season: str, folders: list[Path], tiles: list[Tile]) -> dict
     refls, usable, per_tile_q, lineage = [], [], [], []
     transform = epsg = shape = None
     for f in folders:
-        obs = scene.load_s2(f)
+        obs = scene.load(f)
         transform, epsg, shape = obs.transform, obs.epsg, obs.valid.shape
         vf, cn = quality.tile_fractions(obs.valid, obs.cloud, obs.transform, tiles)
         q = quality.q_score(vf, np.nan, cn, obs.sun_elev if obs.sun_elev is not None else np.nan)
@@ -82,6 +82,7 @@ def build(aoi: str, season: str, folders: list[Path], tiles: list[Tile]) -> dict
         raise ValueError(f"{aoi} {season}: no observations")
 
     comp, _ = median_composite(refls, usable)
+    present = [b for b in CANON if b in comp]  # local imagery may lack bands (e.g. RGB-only)
     qs = np.stack(per_tile_q)  # (n_obs, n_tiles)
     good = qs >= T.quality.Q_MIN
     n_obs = good.sum(0)
@@ -95,7 +96,7 @@ def build(aoi: str, season: str, folders: list[Path], tiles: list[Tile]) -> dict
     prof = {
         "driver": "COG",
         "dtype": "float32",
-        "count": len(CANON),
+        "count": len(present),
         "height": shape[0],
         "width": shape[1],
         "crs": f"EPSG:{epsg}",
@@ -105,7 +106,7 @@ def build(aoi: str, season: str, folders: list[Path], tiles: list[Tile]) -> dict
     }
     tmp = tif.with_suffix(".partial.tif")
     with rasterio.open(tmp, "w", **prof) as d:
-        for i, b in enumerate(CANON, 1):
+        for i, b in enumerate(present, 1):
             d.write(comp[b], i)
             d.set_band_description(i, b)
     tmp.replace(tif)
@@ -117,7 +118,7 @@ def build(aoi: str, season: str, folders: list[Path], tiles: list[Tile]) -> dict
         "start_date": start,
         "end_date": end,
         "file": tif.name,
-        "bands": CANON,
+        "bands": present,
         "lineage": {
             "observations": lineage,
             "processing_version": PROCESSING_VERSION,

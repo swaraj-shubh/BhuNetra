@@ -94,7 +94,7 @@ def ingest_scene(folder: Path, tiles: list[tiling.Tile]) -> str:
         ":raw, CAST(:sha AS jsonb), CAST(:props AS jsonb), :status, :reason)"
     )
     try:
-        obs = scene.load_s2(folder)
+        obs = scene.load(folder)
     except scene.SceneRejected as e:  # a bad scene is stored as rejected, never crashes the batch (§10)
         with db.engine().begin() as conn:
             conn.execute(insert, base | {"status": "rejected", "reason": str(e)})
@@ -271,7 +271,8 @@ def ingest_aoi(aoi: str) -> dict:
     tiles, epsg = _tiles(aoi)
     with db.engine().begin() as conn:
         register_tiles(conn, aoi, tiles, epsg)
-    folders = sorted(p for p in (paths.raw / "sentinel2" / aoi).iterdir() if (p / "scene.json").exists())
+    src_dir = paths.raw / aois[aoi].optical_source / aoi  # one optical source per AOI time series (M3b)
+    folders = sorted(p for p in src_dir.iterdir() if (p / "scene.json").exists())
     counts: dict[str, int] = defaultdict(int)
     with timed("scenes", aoi=aoi, n=len(folders)):
         for f in folders:

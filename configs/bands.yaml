@@ -14,3 +14,16 @@ sentinel1:
 scl:
   invalid: [0, 1, 3, 8, 9, 10]   # nodata, saturated, cloud shadow, cloud medium/high, cirrus
   cloud: [3, 8, 9, 10]           # dilated by quality.CLOUD_DILATE_PX
+
+# Local / organiser imagery (scripts/stage_local.py, M3b). Band tokens are only trusted once the sensor family is
+# identified: "B2" is blue on Sentinel-2 / Landsat 8-9 but GREEN on Resourcesat LISS. Unknown sensor -> only the
+# generic names below (or a --manifest) are accepted.
+local_aliases:
+  generic:    { blue: [blue], green: [green], red: [red], nir: [nir, nir08], nir_narrow: [nir_narrow, nir08_narrow], swir1: [swir1, swir16], swir2: [swir2, swir22] }
+  sentinel2:  { blue: [B02, B2], green: [B03, B3], red: [B04, B4], nir: [B08, B8], nir_narrow: [B8A], swir1: [B11], swir2: [B12] }
+  landsat89:  { blue: [SR_B2, B2], green: [SR_B3, B3], red: [SR_B4, B4], nir: [SR_B5, B5], swir1: [SR_B6, B6], swir2: [SR_B7, B7] }
+  liss:       { green: [B2, BAND2], red: [B3, BAND3], nir: [B4, BAND4], swir1: [B5, BAND5] }   # Resourcesat LISS-III/IV # VERIFY band numbering
+local_sensor_hints:   # case-insensitive substrings of file names / tags -> sensor family
+  sentinel2: [S2A, S2B, S2C, SENTINEL2, SENTINEL-2, MSIL2A, MSIL1C]
+  landsat89: [LC08, LC09, LANDSAT]
+  liss: [LISS, RS2, R2A, RESOURCESAT, L3_, L4_]

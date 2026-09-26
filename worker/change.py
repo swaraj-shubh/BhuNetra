@@ -26,6 +26,7 @@ from ingest import quality, scene, tiling
 from worker.ingest import ACTOR, timed
 
 log = logging.getLogger("worker.change")
+INDEX_BANDS = {"blue", "green", "red", "nir", "swir1"}  # features/indices.py needs all of them
 
 
 def ensure_ard(aoi: str, tiles: list[tiling.Tile]) -> int:
@@ -49,7 +50,10 @@ def ensure_ard(aoi: str, tiles: list[tiling.Tile]) -> int:
             and json.loads(side.read_text(encoding="utf-8"))["fingerprint"] == fp
         ):
             continue
-        obs = scene.load_s2(f)
+        obs = scene.load(f)
+        if missing := INDEX_BANDS - set(obs.refl):
+            log.info(json.dumps({"scene": f.name, "ard": "skipped", "missing_bands": sorted(missing)}))
+            continue
         vf, cn = quality.tile_fractions(obs.valid, obs.cloud, obs.transform, tiles)
         q = quality.q_score(vf, np.nan, cn, obs.sun_elev if obs.sun_elev is not None else np.nan)
         usable = obs.valid & composites.q_ok_mask(q, tiles, obs.transform, obs.valid.shape)
@@ -94,6 +98,14 @@ def run(aoi: str) -> dict:
         n_ard = ensure_ard(aoi, tiles)
     ard_dir = paths.data / "ard" / aoi
     out_dir = paths.data / "change" / aoi
+    if len(list(ard_dir.glob("????-??-??.tif"))) < T.breaks.MIN_BASELINE_OBS + T.breaks.K_PERSIST:
+        # e.g. RGB-only organiser imagery: semantic search works, index-based change does not (§16)
+        return {
+            "aoi": aoi,
+            "ard_built": n_ard,
+            "cascade": "unavailable",
+            "reason": f"needs >= {T.breaks.MIN_BASELINE_OBS + T.breaks.K_PERSIST} dates with {sorted(INDEX_BANDS)}",
+        }
     key = _state_key(ard_dir)
     state_f = out_dir / "state.json"
     if state_f.exists() and json.loads(state_f.read_text(encoding="utf-8")).get("key") == key:

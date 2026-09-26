@@ -86,3 +86,40 @@ def load_s2(folder: Path) -> Observation:
         valid=present & masks.s2_valid_mask(scl, cld),
         cloud=masks.s2_cloud_mask(scl, cld),
     )
+
+
+def load_generic(folder: Path) -> Observation:
+    """Local / organiser scene (ingest/local.py): bands from scene.json["canonical"], no cloud mask unless provided.
+
+    Missing canonical bands are simply absent from `refl` (e.g. RGB-only imagery: search works, indices do not).
+    """
+    meta = read_meta(folder)
+    files = meta["bands"]
+    refl: dict[str, np.ndarray] = {}
+    transform = epsg = present = None
+    for canon, name in meta["canonical"].items():
+        b = files[name]
+        dn, transform, epsg = _read(folder, b, transform)
+        refl[canon] = to_reflectance(dn, b["scale"], b["offset"], b.get("nodata"))
+        ok = ~np.isnan(refl[canon])
+        present = ok if present is None else present & ok
+    if present is None:
+        raise SceneRejected("scene.json lists no bands")
+    return Observation(
+        scene_id="+".join(meta["source_items"]),
+        source=meta["sensor"],
+        aoi=meta["aoi"],
+        date=meta["date"],
+        folder=folder,
+        meta=meta,
+        epsg=epsg,
+        transform=transform,
+        refl=refl,
+        valid=present,
+        cloud=np.zeros_like(present),  # cloud_mask: none -> persistence is the cloud defence (§2.5)
+    )
+
+
+def load(folder: Path) -> Observation:
+    """Any staged scene: STAC-staged Sentinel-2 (SCL/CLD masks) or local/organiser files (generic)."""
+    return load_generic(folder) if "canonical" in read_meta(folder) else load_s2(folder)

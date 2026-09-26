@@ -91,6 +91,9 @@ class AOI(_Strict):
     type: str
     why: str
     bbox: tuple[float, float, float, float]  # lon_min, lat_min, lon_max, lat_max
+    optical_source: str = (
+        "sentinel2"  # the one optical source this AOI's time series uses (M3b; fusion is M9)
+    )
 
 
 class Paths(_Strict):
