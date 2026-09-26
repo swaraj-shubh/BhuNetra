@@ -137,3 +137,25 @@ def test_cascade_block_combines_indices_and_deltas():
     assert np.allclose(out["d_ndvi"][:25], -0.3, atol=0.03)  # deseasonalised: the seasonal cycle is removed
     assert np.isnan(out["d_ndvi"][25:]).all()
     assert (out["water_pre"] == 0).all()
+
+
+def test_sigma_has_dof_correction():
+    y = seasonal(noise=0.05)
+    base = harmonic.baseline_mask(T_DAYS)
+    w = np.broadcast_to(base[:, None], y.shape)
+    m = harmonic.fit(y, w, T_DAYS)
+    res = np.where(w, y - harmonic.predict(m, T_DAYS), np.nan)
+    mad = np.nanmedian(np.abs(res - np.nanmedian(res, axis=0)), axis=0)
+    n, p = base.sum(), 5
+    assert np.allclose(m.sigma, np.maximum(1.4826 * mad * np.sqrt(n / (n - p)), T.breaks.SIGMA_MIN))
+
+
+def test_small_persistent_shift_is_significant_but_gated_out():
+    """A +0.05 NDVI level shift (a wetter year) is >R_MAX sigma but below the smallest actionable NDVI change."""
+    from change import cascade
+
+    ndvi = seasonal()
+    ndvi[40:] += 0.05
+    flat = np.full(ndvi.shape, 0.1) + RNG.normal(0, 0.005, ndvi.shape)
+    out = cascade.block({"ndvi": ndvi, "mndwi": flat - 0.4, "ndbi": flat.copy(), "bsi": flat.copy()}, T_DAYS)
+    assert np.isnan(out["break_idx"]).all()

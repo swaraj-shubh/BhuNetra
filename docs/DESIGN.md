@@ -270,7 +270,7 @@ GET  /audit/verify                                               -> {ok, broken_
 GET  /stats                                                      -> area, scenes, tiles, storage, latency
 ```
 Every `site` and `event` in a response includes `provenance: {scene_ids, model_versions, cascade_version}`.
-Implemented so far: `GET /stats`, `POST /search/text` (M2: no parser yet), plus `GET /chips/{tile_id}/{season}.png` (map chips, not part of the evaluation contract).
+Implemented so far: `GET /stats`, `POST /search/text` (M2: no parser yet), `GET /change`, `GET /events/{id}` (M3), plus `GET /chips/{tile_id}/{season}.png` (map chips, not part of the evaluation contract).
 
 ---
 

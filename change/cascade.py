@@ -16,6 +16,7 @@ from numpy.typing import NDArray
 from rasterio.windows import Window
 
 from change import breaks, harmonic
+from configs.settings import T as CFG
 from features import indices
 
 BANDS = ("break_idx", "last_normal_idx", "d_ndvi", "d_mndwi", "d_ndbi", "d_bsi", "water_pre", "water_post")
@@ -39,6 +40,17 @@ def series(ard_dir: Path) -> Series:
     return Series(dates=dates, files=files, t_days=t)
 
 
+def min_shift(index: str) -> float:
+    """Smallest deseasonalised shift any classification rule acts on (configs/thresholds.yaml -> classify)."""
+    c = CFG.classify
+    return {
+        "ndvi": min(abs(c.CONS_DNDVI), abs(c.CLR_DNDVI)),
+        "mndwi": c.WATER_DMNDWI,
+        "ndbi": c.CONS_DNDBI,
+        "bsi": c.CLR_DBSI,
+    }[index]
+
+
 def block(stack: dict[str, NDArray[np.float64]], t: NDArray[np.float64]) -> dict[str, F32]:
     """stack: index -> (T, N) with NaN = unusable. Returns per-pixel BANDS (N,), pure (unit-testable)."""
     base = harmonic.baseline_mask(t)
@@ -51,10 +63,16 @@ def block(stack: dict[str, NDArray[np.float64]], t: NDArray[np.float64]) -> dict
         m = harmonic.fit(y, valid & base[:, None], t)
         r = harmonic.residuals(y, valid, m, t)
         b = breaks.detect(r, ~base[:, None])
-        earlier = (b.idx >= 0) & ((best < 0) | (b.idx < best))
+        resid[name] = np.where(valid, y - harmonic.predict(m, t), np.nan)  # deseasonalised anomaly
+        own_post = (np.arange(len(t))[:, None] >= b.idx[None, :]) & (b.idx >= 0)[None, :]
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            shift = np.nanmedian(np.where(own_post, resid[name], np.nan), axis=0)
+        # effect-size gate: significant (R_MAX sigma) AND large enough for a classification rule to act on (§2.11)
+        real = (b.idx >= 0) & (np.abs(np.nan_to_num(shift)) >= min_shift(name))
+        earlier = real & ((best < 0) | (b.idx < best))
         best[earlier] = b.idx[earlier]
         last_normal[earlier] = b.last_normal[earlier]
-        resid[name] = np.where(valid, y - harmonic.predict(m, t), np.nan)  # deseasonalised anomaly
 
     post = (np.arange(len(t))[:, None] >= best[None, :]) & (best >= 0)[None, :]
     out: dict[str, F32] = {

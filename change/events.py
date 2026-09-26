@@ -23,14 +23,14 @@ from change.classify import Evidence, classify
 from configs.settings import T as CFG
 from features.composites import season_of
 
-CASCADE_VERSION = "m3-rules-0.1"  # bump on any change to harmonic/breaks/classify/events logic or thresholds
+CASCADE_VERSION = "m3-rules-0.2"  # 0.2: dof-corrected sigma + effect-size gate  # bump on any change to harmonic/breaks/classify/events logic or thresholds
 
 F32 = NDArray[np.float32]
 
 
 @dataclass
 class Event:
-    pixels: NDArray[np.bool_]  # (H, W) footprint
+    pixels: NDArray[np.intp]  # flat indices into the AOI raster
     geom_wkt: str  # MultiPolygon, EPSG:4326
     centroid_m: tuple[float, float]
     change_type: str
@@ -41,9 +41,8 @@ class Event:
     evidence: dict[str, Any]
 
 
-def _shape_stats(mask: NDArray[np.bool_]) -> tuple[float, float]:
+def _shape_stats(rr: NDArray[np.intp], cc: NDArray[np.intp]) -> tuple[float, float]:
     """(elongation = major/minor axis, mean width in px) from the pixel coordinates' principal axes."""
-    rr, cc = np.nonzero(mask)
     if len(rr) < 3:
         return 1.0, float(len(rr))
     ev = np.sort(np.linalg.eigvalsh(np.cov(np.stack([rr, cc]).astype(float))))
@@ -67,17 +66,23 @@ def _magnitude(e: Evidence) -> float:
 
 
 def extract(pix: dict[str, F32], dates: list[str], transform: Affine, epsg: int) -> list[Event]:
-    """pix: cascade BANDS as (H, W) arrays. Returns events (no timeline yet: see timeline())."""
+    """pix: cascade BANDS as (H, W) arrays. Returns events (timelines are added by timelines())."""
     brk = pix["break_idx"]
+    shape_hw = brk.shape
     has = np.isfinite(brk)
-    season = np.full(brk.shape, "", dtype=object)
-    season[has] = [season_of(dates[int(i)]) for i in brk[has]]
+    lut = [season_of(d) for d in dates]  # season per date index: no per-pixel Python work
+    names = sorted(set(lut))
+    code = np.full(shape_hw, -1, np.int16)
+    code[has] = np.array([names.index(x) for x in lut], np.int16)[brk[has].astype(np.intp)]
+    flat_brk = brk.ravel()
     to_ll = Transformer.from_crs(epsg, 4326, always_xy=True).transform
     min_px = CFG.events.MIN_EVENT_PX
     events: list[Event] = []
-    for s in sorted(set(season[has])):
-        m = (season == s).astype(np.uint8)
-        m = rasterio.features.sieve(m, size=min_px, connectivity=8)
+    for k, s in enumerate(names):
+        mask = code == k
+        if mask.sum() < min_px:
+            continue
+        m = rasterio.features.sieve(mask.astype(np.uint8), size=min_px, connectivity=8)
         polys = [
             shape(g)
             for g, v in rasterio.features.shapes(m, mask=m.astype(bool), transform=transform, connectivity=8)
@@ -86,31 +91,34 @@ def extract(pix: dict[str, F32], dates: list[str], transform: Affine, epsg: int)
         if not polys:
             continue
         labels = rasterio.features.rasterize(
-            ((p, i + 1) for i, p in enumerate(polys)), out_shape=m.shape, transform=transform, dtype="int32"
-        )
+            ((p, i + 1) for i, p in enumerate(polys)), out_shape=shape_hw, transform=transform, dtype="int32"
+        ).ravel()
+        labels[~mask.ravel()] = 0  # not the sieved mask: sieve also fills holes that never broke
+        order = np.argsort(labels, kind="stable")
+        bounds = np.searchsorted(labels[order], np.arange(len(polys) + 2))
         for i, poly in enumerate(polys, 1):
-            fp = (labels == i) & (m == 1)
-            n = int(fp.sum())
+            fp = order[bounds[i] : bounds[i + 1]]  # flat indices of label i
+            n = int(fp.size)
             if n < min_px:
                 continue
-            bi = brk[fp]
+            bi = flat_brk[fp]
             consensus = int(np.median(bi))
             coherence = float(np.mean(np.abs(bi - consensus) <= 1))
-            elong, width = _shape_stats(fp)
+            elong, width = _shape_stats(*np.unravel_index(fp, shape_hw))
             ev = Evidence(
-                d_ndvi=float(np.nanmedian(pix["d_ndvi"][fp])),
-                d_mndwi=float(np.nanmedian(pix["d_mndwi"][fp])),
-                d_ndbi=float(np.nanmedian(pix["d_ndbi"][fp])),
-                d_bsi=float(np.nanmedian(pix["d_bsi"][fp])),
-                water_pre=float(np.nanmean(pix["water_pre"][fp])),
-                water_post=float(np.nanmean(pix["water_post"][fp])),
+                d_ndvi=float(np.nanmedian(pix["d_ndvi"].ravel()[fp])),
+                d_mndwi=float(np.nanmedian(pix["d_mndwi"].ravel()[fp])),
+                d_ndbi=float(np.nanmedian(pix["d_ndbi"].ravel()[fp])),
+                d_bsi=float(np.nanmedian(pix["d_bsi"].ravel()[fp])),
+                water_pre=float(np.nanmean(pix["water_pre"].ravel()[fp])),
+                water_post=float(np.nanmean(pix["water_post"].ravel()[fp])),
                 elongation=elong,
                 width_px=width,
             )
             ctype, direction = classify(ev)
             size = min(1.0, float(np.sqrt(n / (4 * min_px))))
             conf = round(coherence * size * _magnitude(ev), 4)
-            ln = pix["last_normal_idx"][fp]
+            ln = pix["last_normal_idx"].ravel()[fp]
             last_normal = int(np.nanmedian(ln)) if np.isfinite(ln).any() else -1
             geom = shp_transform(to_ll, poly)
             mp = geom if isinstance(geom, MultiPolygon) else MultiPolygon([geom])

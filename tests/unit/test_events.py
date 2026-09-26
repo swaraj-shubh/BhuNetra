@@ -43,6 +43,14 @@ def test_block_becomes_one_construction_event_and_specks_are_dropped():
     assert e.geom_wkt.startswith("MULTIPOLYGON")
 
 
+def test_holes_filled_by_the_sieve_are_not_part_of_the_event():
+    p = empty()
+    paint(p, slice(5, 15), slice(5, 15), 40)
+    p["break_idx"][9, 9] = np.nan  # one pixel inside the site never broke (sieve fills such holes)
+    ev = events.extract(p, DATES, TR, 32643)
+    assert len(ev) == 1 and ev[0].evidence["shape"]["n_px"] == 99 and ev[0].break_idx == 40
+
+
 def test_same_place_different_seasons_are_separate_events():
     p = empty()
     paint(p, slice(5, 15), slice(5, 15), 40)

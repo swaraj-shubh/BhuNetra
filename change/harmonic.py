@@ -1,7 +1,7 @@
 """Seasonal baseline per pixel (DESIGN.md §7). Pure numpy, vectorised over pixels (no per-pixel Python loop).
 
     y(t) = a0 + a1 cos(2πt/365.25) + b1 sin(2πt/365.25) + a2 cos(4πt/365.25) + b2 sin(4πt/365.25) [+ c·t]
-    r(t) = (y - ŷ) / σ,   σ = max(1.4826 · MAD(baseline residuals), SIGMA_MIN)
+    r(t) = (y - ŷ) / σ,   σ = max(1.4826 · MAD(baseline residuals) · √(n/(n-p)), SIGMA_MIN)
 
 The c·t trend is fitted only when the baseline spans at least TREND_MIN_MONTHS (M3 decision): a
 trend fitted on one year and extrapolated over six creates false breaks.
@@ -70,7 +70,10 @@ def fit(y: F, w: B, t: F) -> Model:
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", RuntimeWarning)  # all-NaN columns = unmodelled pixels
         mad = np.nanmedian(np.abs(res - np.nanmedian(res, axis=0)), axis=0)
-    sigma = np.maximum(1.4826 * mad, CFG.breaks.SIGMA_MIN)
+    dof = np.sqrt(
+        n / np.maximum(n - p, 1)
+    )  # residual scale after fitting p parameters to n obs is biased low
+    sigma = np.maximum(1.4826 * mad * dof, CFG.breaks.SIGMA_MIN)
     sigma[~ok] = np.nan
     return Model(coef=coef, sigma=sigma, trend=trend)
 

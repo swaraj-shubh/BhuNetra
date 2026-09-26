@@ -99,8 +99,19 @@ def run(aoi: str) -> dict:
     if state_f.exists() and json.loads(state_f.read_text(encoding="utf-8")).get("key") == key:
         return {"aoi": aoi, "ard_built": n_ard, "cascade": "skipped"}
 
-    with timed("cascade", aoi=aoi):
-        s = cascade.run(ard_dir, out_dir / "pixels.tif")
+    pix_key = (
+        out_dir / "pixels.json"
+    )  # the per-pixel pass is the slow part (~15 min/AOI): reuse it when inputs match
+    if (
+        (out_dir / "pixels.tif").exists()
+        and pix_key.exists()
+        and json.loads(pix_key.read_text(encoding="utf-8")) == key
+    ):
+        s = cascade.series(ard_dir)
+    else:
+        with timed("cascade", aoi=aoi):
+            s = cascade.run(ard_dir, out_dir / "pixels.tif")
+        pix_key.write_text(json.dumps(key), encoding="utf-8")
     with rasterio.open(out_dir / "pixels.tif") as d:
         pix = {b: d.read(i + 1) for i, b in enumerate(cascade.BANDS)}
         transform = d.transform
@@ -109,7 +120,7 @@ def run(aoi: str) -> dict:
         scene_ids = [
             json.loads(f.with_suffix(".json").read_text(encoding="utf-8"))["scene_id"] for f in s.files
         ]
-        tls = events.timelines([np.flatnonzero(e.pixels) for e in evs], (indices.read(f) for f in s.files))
+        tls = events.timelines([e.pixels for e in evs], (indices.read(f) for f in s.files))
 
     k = T.breaks.K_PERSIST
     rows = []
