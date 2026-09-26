@@ -73,6 +73,31 @@ def main() -> None:
         n_audit = len(audit.load(conn))
     reconcile.rebuild()
     after = search(c, "bright structure")
+    # M6: reject the top 2 sites of a stored query -> they leave the ranking; reject an event -> analyst_status
+    q = c.post("/search/text", json={"query": "bright structure", "aoi": "synth", "k": 10}).json()
+    rejected = [s["tile_id"] for s in q["sites"][:2]]
+    rr = None
+    for t in rejected:
+        rr = c.post(
+            "/feedback",
+            json={"target": {"type": "site", "id": t}, "decision": "reject", "query_id": q["query_id"]},
+        ).json()
+    ev_fb = (
+        c.post(
+            "/feedback",
+            json={
+                "target": {"type": "event", "id": ev[0]["event_id"]},
+                "decision": "reject",
+                "reason": "test",
+            },
+        ).json()
+        if ev
+        else None
+    )
+    ev_status = c.get(f"/events/{ev[0]['event_id']}").json()["analyst_status"] if ev else None
+    with db.engine().connect() as conn:
+        broken_after_fb = audit.verify(audit.load(conn))
+        n_audit_after_fb = len(audit.load(conn))
     chip = c.get(hits[0]["chip_url"]) if hits else None
     print(
         json.dumps(
@@ -89,6 +114,13 @@ def main() -> None:
                 "change_again": change_again,
                 "change_events": ev,
                 "event_detail": detail,
+                "fb_before": [s["tile_id"] for s in q["sites"]],
+                "fb_rejected": rejected,
+                "fb_after": [s["tile_id"] for s in rr["sites"]] if rr else None,
+                "fb_event": ev_fb,
+                "fb_event_status": ev_status,
+                "audit_broken_after_fb": broken_after_fb,
+                "audit_entries_after_fb": n_audit_after_fb,
             }
         )
     )

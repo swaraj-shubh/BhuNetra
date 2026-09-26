@@ -56,7 +56,9 @@ def page() -> FileResponse:
 
 @router.get("/guidelines")
 def guidelines() -> FileResponse:
-    return FileResponse(paths.root / "eval" / "labels" / "M5_GUIDELINES.md", media_type="text/plain; charset=utf-8")
+    return FileResponse(
+        paths.root / "eval" / "labels" / "M5_GUIDELINES.md", media_type="text/plain; charset=utf-8"
+    )
 
 
 @router.get("/items")

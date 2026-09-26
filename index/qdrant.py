@@ -26,7 +26,9 @@ EO_VEC_DIM = int(os.environ.get("EO_VEC_DIM", "1024"))  # VERIFY Prithvi-EO-2.0-
 @lru_cache(maxsize=1)
 def client() -> QdrantClient:
     url = os.environ.get("QDRANT_URL")  # set by docker/compose.yaml; embedded mode otherwise (dev laptop)
-    return QdrantClient(url=url) if url else QdrantClient(path=str(paths.qdrant))
+    # default client timeout is 5 s; on the shared AWS box (CPU contention from other projects) searches exceeded it
+    timeout = int(os.environ.get("QDRANT_TIMEOUT_S", "30"))
+    return QdrantClient(url=url, timeout=timeout) if url else QdrantClient(path=str(paths.qdrant))
 
 
 def point_id(key: str) -> str:

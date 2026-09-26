@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import Review, { type EventRow } from "./Review";
 import * as maplibregl from "maplibre-gl";
 import type { GeoJSONSource, LngLatBoundsLike, MapLayerMouseEvent } from "maplibre-gl";
 // v6 looks for its worker next to its own module, which does not exist once bundled: bundle it and point there.
@@ -50,6 +51,9 @@ export default function App() {
   const [selected, setSelected] = useState<string | null>(null);
   const [status, setStatus] = useState("");
   const [ready, setReady] = useState(false);
+  const [tab, setTab] = useState<"search" | "review">("search");
+  const [queryId, setQueryId] = useState<string | null>(null);
+  const [fb, setFb] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const m = new maplibregl.Map({
@@ -60,6 +64,9 @@ export default function App() {
     });
     m.on("load", () => {
       m.addSource("sites", { type: "geojson", data: EMPTY });
+      m.addSource("event", { type: "geojson", data: EMPTY });
+      m.addLayer({ id: "event-fill", type: "fill", source: "event", paint: { "fill-color": "#ff3b30", "fill-opacity": 0.35 } });
+      m.addLayer({ id: "event-line", type: "line", source: "event", paint: { "line-color": "#ff3b30", "line-width": 2 } });
       m.addLayer({ id: "sites-line", type: "line", source: "sites", paint: { "line-color": "#f5b400", "line-width": 2 } });
       m.addLayer({
         id: "sites-sel",
@@ -128,6 +135,8 @@ export default function App() {
       if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
       const body = await r.json();
       setSites(body.sites);
+      setQueryId(body.query_id ?? null);
+      setFb({});
       setParsed(body.parsed);
       setWarnings(body.warnings ?? []);
       setSelected(null);
@@ -135,6 +144,32 @@ export default function App() {
     } catch (err) {
       setStatus(`error: ${(err as Error).message}`);
     }
+  }
+
+  function showEvent(ev: EventRow | null) {
+    const m = map.current;
+    if (!m || !ready) return;
+    (m.getSource("event") as GeoJSONSource).setData(ev ? { type: "Feature", geometry: ev.geometry, properties: {} } : EMPTY);
+    if (ev) {
+      const cs = ev.geometry.coordinates.flat(2) as GeoJSON.Position[];
+      const xs = cs.map((c) => c[0]), ys = cs.map((c) => c[1]);
+      m.fitBounds([Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)] as LngLatBoundsLike, { padding: 120, maxZoom: 15 });
+    }
+  }
+
+  async function siteFeedback(tile: string, decision: "confirm" | "reject") {
+    if (!queryId) return;
+    setStatus(`${decision}ing ${tile}…`);
+    const r = await fetch("/feedback", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ target: { type: "site", id: tile }, decision, query_id: queryId }),
+    });
+    if (!r.ok) return setStatus(`error ${r.status}`);
+    const body = await r.json();
+    setFb(body.feedback ?? {});
+    setSites(body.sites);
+    setStatus(`re-ranked with your feedback (${Object.keys(body.feedback ?? {}).length} decisions; rejected sites removed)`);
   }
 
   const sel = sites.find((s) => s.tile_id === selected);
@@ -148,7 +183,12 @@ export default function App() {
   return (
     <div className="app">
       <aside>
-        <h1>EO Archive Search</h1>
+        <h1>EO Archive</h1>
+        <div className="tabs" role="tablist">
+          <button role="tab" aria-selected={tab === "search"} className={tab === "search" ? "on" : ""} onClick={() => setTab("search")}>Search</button>
+          <button role="tab" aria-selected={tab === "review"} className={tab === "review" ? "on" : ""} onClick={() => setTab("review")}>Review queue</button>
+        </div>
+        {tab === "review" ? <Review onShow={showEvent} /> : <>
         <form onSubmit={search}>
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="e.g. salt pans, industrial area, river" autoFocus />
           <select value={aoi} onChange={(e) => setAoi(e.target.value)} aria-label="Area of interest">
@@ -181,6 +221,12 @@ export default function App() {
                   </>
                 )}
                 {"water" in s.dist_m && <> · water {Math.round(s.dist_m.water)} m</>}
+                {queryId && (
+                  <span className="fb" onClick={(e) => e.stopPropagation()}>
+                    <button title="Relevant" className={fb[s.tile_id] === "confirm" ? "on" : ""} onClick={() => siteFeedback(s.tile_id, "confirm")}>✓</button>
+                    <button title="Not relevant" onClick={() => siteFeedback(s.tile_id, "reject")}>✗</button>
+                  </span>
+                )}
               </div>
             </li>
           ))}
@@ -196,6 +242,7 @@ export default function App() {
             {sel.events.length > 0 && <p>Events: {sel.events.map((e) => e.event_id).join(", ")}</p>}
           </section>
         )}
+        </>}
       </aside>
       <main ref={mapDiv} />
     </div>

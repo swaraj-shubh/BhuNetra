@@ -99,14 +99,119 @@ class TextQuery(BaseModel):
 
 @app.post("/search/text")
 def search_text(q: TextQuery) -> dict:
-    """Parse -> semantic | change | spatial branches -> fusion -> unique sites (M4, query/retrieve.py)."""
+    """Parse -> semantic | change | spatial branches -> fusion -> unique sites (M4). Stored as a query for /feedback."""
     from query import parser, retrieve
 
     t0 = time.perf_counter()
     p = parser.parse(q.query)
     out = retrieve.search(p, retrieve.Request(aoi=q.aoi, date_range=q.date_range, k=q.k))
+    qid = db.uuid7()
+    with db.engine().begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO queries (query_id, text, request, parsed) VALUES (:i, :t, CAST(:r AS jsonb), CAST(:p AS jsonb))"
+            ),
+            {"i": qid, "t": q.query, "r": q.model_dump_json(), "p": json.dumps(p.as_dict())},
+        )
     LATENCY_MS["search_text"] = round((time.perf_counter() - t0) * 1000, 1)
-    return {"parsed": p.as_dict(), **out}
+    return {"query_id": str(qid), "parsed": p.as_dict(), **out}
+
+
+class Target(BaseModel):
+    type: str = Field(pattern="^(site|event)$")
+    id: str = Field(min_length=1, max_length=80)
+
+
+class Feedback(BaseModel):
+    target: Target
+    decision: str = Field(pattern="^(confirm|reject)$")
+    reason: str = Field(default="", max_length=500)
+    query_id: str | None = None
+    actor: str = Field(default="analyst", min_length=1, max_length=60)  # real identity comes with RBAC (M8)
+
+
+@app.post("/feedback")
+def feedback(f: Feedback) -> dict:
+    """Store the decision (+ audit, same transaction). Events get analyst_status. With query_id: Rocchio re-rank,
+    rejected sites removed (DESIGN.md §3 review loop)."""
+    from governance import audit
+
+    with db.engine().begin() as conn:
+        if f.target.type == "event":
+            n = conn.execute(
+                text(
+                    "UPDATE change_events SET analyst_status = CAST(:s AS analyst_status) WHERE event_id = :i"
+                ),
+                {"s": "confirmed" if f.decision == "confirm" else "rejected", "i": f.target.id},
+            ).rowcount
+            if n == 0:
+                raise HTTPException(404, f"unknown event {f.target.id}")
+        elif not conn.execute(text("SELECT 1 FROM tiles WHERE tile_id = :t"), {"t": f.target.id}).first():
+            raise HTTPException(404, f"unknown site {f.target.id}")
+        conn.execute(
+            text(
+                "INSERT INTO feedback (target_type, target_id, decision, reason, query_id, actor) "
+                "VALUES (:tt, :ti, :d, :r, :q, :a)"
+            ),
+            {
+                "tt": f.target.type,
+                "ti": f.target.id,
+                "d": f.decision,
+                "r": f.reason,
+                "q": f.query_id,
+                "a": f.actor,
+            },
+        )
+        audit.append(conn, f.actor, f"feedback.{f.decision}", f.model_dump())
+    return {"recorded": True, **(rerank(f.query_id) if f.query_id else {})}
+
+
+def rerank(query_id: str) -> dict:
+    import numpy as np
+
+    from features import embed_clip
+    from query import parser, retrieve
+    from query.rocchio import rocchio
+
+    with db.engine().connect() as conn:
+        row = conn.execute(
+            text("SELECT text, request FROM queries WHERE query_id = CAST(:i AS uuid)"), {"i": query_id}
+        ).first()
+        if row is None:
+            raise HTTPException(404, f"unknown query {query_id}")
+        fb = conn.execute(
+            text(
+                "SELECT DISTINCT ON (target_id) target_id, decision FROM feedback "
+                "WHERE query_id = :q AND target_type = 'site' ORDER BY target_id, feedback_id DESC"
+            ),
+            {"q": query_id},
+        ).all()
+        decided = {t: d for t, d in fb}
+        vecs = (
+            {
+                t: np.mean([np.asarray(v, dtype=np.float32) for v in vs], axis=0)
+                for t, vs in conn.execute(
+                    text(
+                        "SELECT tile_id, array_agg(text_vec) FROM composites WHERE tile_id = ANY(:t) AND text_vec IS NOT NULL GROUP BY tile_id"
+                    ),
+                    {"t": list(decided)},
+                ).all()
+            }
+            if decided
+            else {}
+        )
+    req = TextQuery(**row.request)
+    p = parser.parse(row.text)
+    vec = rocchio(
+        embed_clip.embed_text(p.semantic),
+        [vecs[t] for t, d in decided.items() if d == "confirm" and t in vecs],
+        [vecs[t] for t, d in decided.items() if d == "reject" and t in vecs],
+    )
+    rejected = frozenset(t for t, d in decided.items() if d == "reject")
+    out = retrieve.search(
+        p, retrieve.Request(aoi=req.aoi, date_range=req.date_range, k=req.k), vec=vec, exclude_tiles=rejected
+    )
+    return {"query_id": query_id, "feedback": decided, "sites": out["sites"], "warnings": out["warnings"]}
 
 
 CHANGE_TYPES = ("construction", "clearance", "water", "road", "other")

@@ -96,7 +96,8 @@ def events(conn, p: Parsed, aoi: str | None, date_range) -> dict[str, list[dict]
     return by_tile
 
 
-def search(p: Parsed, req: Request) -> dict:
+def search(p: Parsed, req: Request, vec=None, exclude_tiles: frozenset[str] = frozenset()) -> dict:
+    """vec: override the query embedding (Rocchio feedback); exclude_tiles: sites the analyst rejected."""
     from features import embed_clip  # torch import only when searching
 
     aoi = req.aoi or p.aoi
@@ -104,7 +105,8 @@ def search(p: Parsed, req: Request) -> dict:
     warnings = list(p.warnings)
     if p.sensor and p.sensor not in INDEXED_SENSORS:
         warnings.append(f"sensor_not_indexed:{p.sensor}")
-    vec = embed_clip.embed_text(p.semantic)
+    if vec is None:
+        vec = embed_clip.embed_text(p.semantic)
 
     with db.engine().connect() as conn:
         ev = events(conn, p, aoi, date_range) if p.change else {}
@@ -114,6 +116,7 @@ def search(p: Parsed, req: Request) -> dict:
         else:
             sem = semantic(vec, aoi, date_range)
             tiles = sorted(sem)
+        tiles = [t for t in tiles if t not in exclude_tiles]
         if not tiles:
             return {"sites": [], "warnings": warnings}
         rows = conn.execute(

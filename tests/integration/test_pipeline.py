@@ -185,4 +185,11 @@ def test_synthetic_aoi_end_to_end(tmp_path):
     assert not any(x["tile_id"] == target.tile_id for x in evs)  # a constant bright roof is not change
     detail = out["event_detail"]
     assert len(detail["evidence"]["timeline"]["dates"]) == 24 and detail["evidence"]["calibrated"] is False
-    assert out["audit_broken_at"] is None and out["audit_entries"] == 24 + 9 + 1  # scenes + seasons + change
+    # scenes + seasons + tile context (M4) + change
+    assert out["audit_broken_at"] is None and out["audit_entries"] == 24 + 9 + 1 + 1
+
+    # M6 exit: rejecting 2 results changes the ranking live; event feedback sets analyst_status; all audited
+    assert len(out["fb_rejected"]) == 2 and not set(out["fb_rejected"]) & set(out["fb_after"])
+    assert out["fb_after"] != out["fb_before"]
+    assert out["fb_event"]["recorded"] is True and out["fb_event_status"] == "rejected"
+    assert out["audit_broken_after_fb"] is None and out["audit_entries_after_fb"] == out["audit_entries"] + 3
