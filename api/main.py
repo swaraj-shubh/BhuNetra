@@ -41,6 +41,10 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(title="SIH26227 EO archive", lifespan=lifespan)
 
+from api.label import router as label_router
+
+app.include_router(label_router)
+
 
 def _dir_bytes(p: Path) -> int:
     return sum(f.stat().st_size for f in p.rglob("*") if f.is_file()) if p.exists() else 0

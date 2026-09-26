@@ -42,6 +42,7 @@ services:
       - ../data:/app/data            # raw/ is never written by the api (DESIGN.md §2.12)
       - ../models:/app/models:ro
       - ../manifests:/app/manifests:ro
+      - ../eval/labels:/app/eval/labels:ro   # M5 sample + pre-labels for /label (human labels go to data/labels)
     depends_on:
       db: {condition: service_healthy}
       qdrant: {condition: service_started}

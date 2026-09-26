@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>M5 Change Labelling</title>
+<style>
+  :root { --bg:#111418; --panel:#1a1f25; --line:#2c333b; --text:#e6e9ed; --muted:#8b96a3; --accent:#f5a524; --ok:#3fb950; --no:#f85149; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.45 system-ui, sans-serif; background: var(--bg); color: var(--text); }
+  header { display: flex; gap: 12px; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  h1 { font-size: 16px; margin: 0; }
+  select, input, button { font: inherit; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; }
+  button { cursor: pointer; }
+  button.sel { border-color: var(--accent); color: var(--accent); }
+  main { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; padding: 16px; }
+  img { width: 100%; height: auto; background: #fff; border-radius: 6px; }
+  aside { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px; align-self: start; }
+  .row { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 12px; }
+  .muted { color: var(--muted); font-size: 12px; }
+  .pre { border-left: 3px solid var(--accent); padding: 6px 10px; background: #221d12; border-radius: 4px; margin-bottom: 12px; }
+  textarea { width: 100%; min-height: 60px; font: inherit; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 6px; }
+  .progress { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; flex: 1; min-width: 120px; }
+  .progress > div { height: 100%; background: var(--ok); }
+  kbd { background: var(--bg); border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; font-size: 11px; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>M5 change labelling</h1>
+  <select id="set" aria-label="Label set">
+    <option value="calibration">Calibration (pre-labelled: correct it)</option>
+    <option value="heldout">Held-out (blind)</option>
+  </select>
+  <input id="who" placeholder="your name" aria-label="Labeller name" size="12">
+  <span id="count" class="muted"></span>
+  <div class="progress" aria-hidden="true"><div id="bar" style="width:0"></div></div>
+  <button id="prev">← prev</button><button id="next">next →</button>
+  <button id="todo">next unlabelled</button>
+  <a href="/label/guidelines" target="_blank" style="color:var(--accent)">guidelines</a>
+</header>
+<main>
+  <section>
+    <img id="view" alt="Before and after composites around the event outline (yellow) and the index timeline">
+    <p class="muted">Yellow = event outline. Before/after = seasonal composites. Timeline: NDVI green, NDBI red, MNDWI blue, BSI brown; grey line = last normal, red = earliest supported date. 10 m pixels: judge areas, not objects.</p>
+  </section>
+  <aside>
+    <div id="eid" style="font-weight:600"></div>
+    <div id="systype" class="muted"></div>
+    <div id="pre" class="pre" hidden></div>
+    <div>Is this a <b>real, persistent</b> change on the ground? <span class="muted">(<kbd>y</kbd> <kbd>n</kbd> <kbd>u</kbd>)</span></div>
+    <div class="row" id="real">
+      <button data-v="yes">Yes</button><button data-v="no">No / artefact</button><button data-v="unsure">Unsure</button>
+    </div>
+    <div>If yes, what kind? <span class="muted">(<kbd>1</kbd>–<kbd>5</kbd>)</span></div>
+    <div class="row" id="type">
+      <button data-v="construction">1 construction</button><button data-v="clearance">2 clearance</button>
+      <button data-v="water">3 water</button><button data-v="road">4 road</button><button data-v="other">5 other</button>
+    </div>
+    <textarea id="note" placeholder="optional note (e.g. seasonal flooding, cloud, farmland fallow)"></textarea>
+    <div class="row"><button id="save" style="border-color:var(--ok)">Save & next <kbd>Enter</kbd></button></div>
+    <div id="msg" class="muted"></div>
+  </aside>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+let items = [], i = 0, real = null, ttype = null;
+try { $("who").value = localStorage.getItem("labeller") || ""; } catch (e) {}
+
+function pick(group, v) { document.querySelectorAll(`#${group} button`).forEach(b => b.classList.toggle("sel", b.dataset.v === v)); }
+function setReal(v) { real = v; pick("real", v); if (v !== "yes") { ttype = null; pick("type", null); } }
+function setType(v) { ttype = v; pick("type", v); if (real !== "yes") setReal("yes"); }
+
+async function load() {
+  const r = await fetch(`/label/items?set=${$("set").value}`);
+  const d = await r.json(); items = d.items;
+  i = Math.max(0, items.findIndex(x => !x.human)); if (i < 0) i = 0;
+  show();
+}
+function show() {
+  const it = items[i]; if (!it) return;
+  const done = items.filter(x => x.human).length;
+  $("count").textContent = `${i + 1}/${items.length} · labelled ${done}`;
+  $("bar").style.width = `${100 * done / items.length}%`;
+  $("eid").textContent = it.event_id;
+  $("systype").textContent = it.system_type ? `system says: ${it.system_type}` : "blind (held-out)";
+  $("view").src = `/label/view/${it.event_id}.png`;
+  const cur = it.human || it.prelabel;
+  $("pre").hidden = !it.prelabel;
+  if (it.prelabel) $("pre").textContent = `Model pre-label: ${it.prelabel.real}${it.prelabel.true_type ? " · " + it.prelabel.true_type : ""}${it.prelabel.note ? " — " + it.prelabel.note : ""}`;
+  setReal(cur ? cur.real : null); setType(cur && cur.true_type ? cur.true_type : null);
+  if (cur && cur.real !== "yes") setReal(cur.real);
+  $("note").value = it.human ? it.human.note : "";
+  $("msg").textContent = it.human ? `saved by ${it.human.labeller} ${it.human.ts}` : "";
+}
+async function save() {
+  const who = $("who").value.trim();
+  if (!who) { $("msg").textContent = "enter your name first"; $("who").focus(); return; }
+  if (!real) { $("msg").textContent = "choose yes / no / unsure"; return; }
+  if (real === "yes" && !ttype) { $("msg").textContent = "choose the change type"; return; }
+  try { localStorage.setItem("labeller", who); } catch (e) {}
+  const it = items[i];
+  const r = await fetch(`/label/${it.event_id}`, { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ real, true_type: real === "yes" ? ttype : null, note: $("note").value, labeller: who }) });
+  if (!r.ok) { $("msg").textContent = `error ${r.status}: ${await r.text()}`; return; }
+  it.human = await r.json();
+  if (i < items.length - 1) i++;
+  show();
+}
+document.querySelectorAll("#real button").forEach(b => b.onclick = () => setReal(b.dataset.v));
+document.querySelectorAll("#type button").forEach(b => b.onclick = () => setType(b.dataset.v));
+$("save").onclick = save;
+$("prev").onclick = () => { if (i > 0) { i--; show(); } };
+$("next").onclick = () => { if (i < items.length - 1) { i++; show(); } };
+$("todo").onclick = () => { const j = items.findIndex((x, k) => k > i && !x.human); if (j >= 0) { i = j; show(); } };
+$("set").onchange = load;
+document.addEventListener("keydown", (e) => {
+  if (e.target.tagName === "TEXTAREA" || e.target.tagName === "INPUT") { if (e.key === "Enter" && e.target.tagName === "INPUT") save(); return; }
+  const m = { y: "yes", n: "no", u: "unsure" }[e.key]; if (m) return setReal(m);
+  const t = { 1: "construction", 2: "clearance", 3: "water", 4: "road", 5: "other" }[e.key]; if (t) return setType(t);
+  if (e.key === "Enter") return save();
+  if (e.key === "ArrowRight") $("next").click();
+  if (e.key === "ArrowLeft") $("prev").click();
+});
+load();
+</script>
+</body>
+</html>

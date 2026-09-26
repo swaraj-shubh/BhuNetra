@@ -1,0 +1,301 @@
+event_id,real,true_type,note
+CHG-000292,no,,salt flat: same monsoon wetting cycle before and after
+CHG-000330,unsure,,small bright patch at pond edge; timeline ambiguous
+CHG-000428,yes,water,new dark strip (canal/pond); MNDWI from ~-0.3 to recurring water spikes after 2020
+CHG-000682,no,,seasonal cycle unchanged; neighbouring vegetation strip only
+CHG-000687,no,,pond-margin wetting/drying; before/after identical
+CHG-000735,unsure,,road embankment; seasonal flooding dominates the timeline
+CHG-000938,yes,other,winter crop NDVI peaks (0.5-0.8) stop after 2022: cultivation ended; imagery similar
+CHG-001034,unsure,,dark patch appears in outline (pit filling?) but MNDWI does not confirm
+CHG-001160,yes,water,large new water body appears beside the outline (reservoir/salt pan filled)
+CHG-001664,yes,construction,bare pad -> grey structures; NDBI jumps and stays high after 2022
+CHG-001686,yes,road,wide new grey band along the elongated outline next to existing road
+CHG-001805,yes,other,crop cycle stops entirely after 2022 (land pooling); only a small bright structure
+CHG-001916,yes,other,crop NDVI cycle stops after 2022; land left bare/rough
+CHG-002092,yes,water,new water body/canal fills the outline after 2022
+CHG-002143,yes,other,crop cycle stops after 2022; outline turns bare
+CHG-002148,yes,construction,ground graded/disturbed at settlement edge; crop cycle stops (NDBI flat: check)
+CHG-002153,yes,other,crop cycle stops after 2022; outline bare
+CHG-002188,yes,water,new canal (water strip) through the outline
+CHG-002194,yes,water,new wide canal through the outline
+CHG-002286,yes,other,crop cycle stops after 2023; slight NDBI rise 2025
+CHG-002346,yes,road,new pale earthwork/track grid; outline on a linear feature
+CHG-002454,yes,other,new track grid (land pooling); crop cycle ends; flooded 2025-26
+CHG-002465,yes,other,new track grid; but crop peaks continue until 2025 (change later than red line)
+CHG-003049,unsure,,new irrigated plots beside outline; outline itself ambiguous
+CHG-003138,yes,construction,new yard: structures + graded ground next to salt pans
+CHG-003610,yes,clearance,vegetation stripped to bare ground beside industrial buildings; NDVI 0.7->0.1 persistent
+CHG-003625,unsure,,dense urban; NDVI drop only at series start (2019)
+CHG-003628,yes,construction,vegetation replaced by grey built structures
+CHG-003900,no,,seasonal cycle continues; imagery unchanged
+CHG-004027,unsure,,coastal vegetation lost 2021-2023 then recovered by 2024
+CHG-004162,unsure,,vegetation drop 2023 then recovery 2025; imagery similar
+CHG-004194,yes,clearance,warehouses demolished and plot graded bare; NDVI 0.7->0.1 persistent
+CHG-004265,no,,seasonal NDVI cycle continues (peaks 2025/2026); drier year only
+CHG-004289,yes,construction,vegetation lost permanently; new road/structures adjacent (clearance vs construction unclear)
+CHG-004290,yes,construction,bright built surface replaces vegetation; NDVI 0.6->0.05
+CHG-004332,yes,road,new embankment/road band cut through vegetation
+CHG-004335,yes,road,new road junction/roundabout through vegetation
+CHG-004351,yes,road,new embankment loop road around a pond
+CHG-004367,yes,clearance,creek-bank vegetation cleared; NDVI 0.7->0.25, NDBI up
+CHG-004554,yes,clearance,bare patch expands into forest (hasdeo)
+CHG-004622,yes,clearance,forest NDVI 0.7->0.1 persistent from 2021 (mine); after composite predates the drop
+CHG-004642,no,,forest edge by mine: seasonal NDVI cycle continues
+CHG-004648,no,,seasonal cycle continues; imagery similar
+CHG-004671,yes,clearance,forest -> mine benches/dump; NDVI flat ~0.1 after 2021
+CHG-004677,yes,clearance,forest -> mine; NDVI 0.7->0.1 persistent
+CHG-004678,yes,clearance,forest -> mine bench
+CHG-004679,yes,clearance,forest -> mine bench
+CHG-004685,no,,seasonal forest cycle continues
+CHG-004700,no,,seasonal cycle continues
+CHG-004712,yes,clearance,forest strip cut by mine expansion; NDVI 0.7->0.1 persistent
+CHG-004716,yes,clearance,forest -> mine bench; NDVI 0.7->0.1 persistent
+CHG-004725,yes,clearance,forest -> mine face
+CHG-004730,yes,clearance,forest strip -> mine bench
+CHG-004822,yes,clearance,forest cleared ~2024-25 (NDVI flat 0.1 after), not at the 2022 red line
+CHG-004829,unsure,,forest seasonal cycle damped after 2023 (degradation or drought?)
+CHG-004830,unsure,,forest seasonal cycle damped after 2023; imagery similar
+CHG-004881,yes,clearance,forest -> mine pit
+CHG-004890,yes,clearance,forest -> mine pit/benches
+CHG-004898,yes,clearance,forest -> mine face
+CHG-004899,yes,clearance,forest edge -> mine
+CHG-004900,yes,clearance,forest -> mine benches
+CHG-004903,yes,clearance,forest -> mine face
+CHG-004939,yes,clearance,forest cleared to bare beside mine; NDVI 0.6->0.1
+CHG-004964,unsure,,half the view no-data; seasonal cycle only weaker after 2025
+CHG-004983,yes,clearance,forest -> mine bench (2024-25)
+CHG-004985,yes,clearance,forest -> mine bench (2024-25)
+CHG-005045,yes,clearance,forest edge -> mine face (2025)
+CHG-005050,unsure,,end of series: too few observations after the break
+CHG-005051,unsure,,end of series; small pale patch appears near a pond
+CHG-005108,yes,clearance,forest cleared beside mine (end of series, few post obs)
+CHG-002197,yes,road,road widening/new embankment along existing road; crop cycle ends
+CHG-002807,yes,road,new bright linear embankment/road (2024-25)
+CHG-003304,yes,road,new cloverleaf interchange ramp
+CHG-003678,yes,clearance,vegetation cleared 2020 (NDVI 0.7->0.2), partial regrowth later
+CHG-003707,yes,clearance,green plot -> bare/flat NDVI ~0.1 from 2021-22
+CHG-003714,yes,construction,urban green plot built over in 2022 (red line says 2020)
+CHG-003722,no,,cropland mosaic: seasonal NDVI cycle continues
+CHG-003828,yes,clearance,park/vegetation cleared 2022; NDVI 0.8->0.15 persistent
+CHG-003929,unsure,,small patch; NDVI lower after 2020 but seasonal peaks remain
+CHG-003963,yes,construction,new roofed structure appears in/next to outline
+CHG-004023,yes,clearance,shoreline mangrove lost 2020 (NDVI 0.7->0.25); regrown by 2025
+CHG-004114,yes,clearance,urban green plot graded bare; NDVI 0.65->0.1 persistent
+CHG-004123,yes,clearance,vegetation -> bare after 2021; persistent
+CHG-004148,yes,clearance,hillside vegetation graded/quarried bare; NDVI 0.8->0.15
+CHG-004333,yes,clearance,green plot vegetation removed beside new road works; NDVI 0.7->0.2
+CHG-004342,yes,construction,vegetation -> grey paved/built site (2024)
+CHG-004344,yes,clearance,vegetation -> bright graded site (2024-25)
+CHG-004372,yes,clearance,vegetation -> bright bare/structure (end of series, few obs)
+CHG-004380,unsure,,end of series; imagery similar
+CHG-004475,unsure,,end of series (2026); no after composite
+CHG-004476,unsure,,urban park NDVI 0.8->0.1 but only at series end (2026); no after composite
+CHG-004551,yes,clearance,forest thinned/cleared ~2023 (NDVI to ~0.2 persistent); red line 2020 too early
+CHG-004646,yes,clearance,small clearing in forest; NDVI 0.7->0.25 persistent
+CHG-004824,yes,clearance,forest patch cleared 2023
+CHG-004908,yes,clearance,forest -> cleared ground beside mine
+CHG-004938,yes,clearance,forest strip -> cleared for mine
+CHG-005024,yes,clearance,forest -> mine haul road/face (2025)
+CHG-005028,yes,clearance,forest -> mine (2025)
+CHG-005031,yes,clearance,forest -> cleared beside mine (end of series)
+CHG-005032,yes,clearance,forest -> cleared beside mine
+CHG-005046,yes,clearance,forest edge -> mine face (end of series)
+CHG-005048,unsure,,outline still looks forested in 2026 composite though NDVI lower
+CHG-005053,yes,clearance,new bright bare patch beside pond (2025-26)
+CHG-005075,yes,clearance,forest -> cleared for mine (2025)
+CHG-005107,yes,clearance,scrub cleared beside mine (2025-26)
+CHG-005109,yes,clearance,scrub cleared beside mine (2025-26)
+CHG-005115,yes,clearance,forest edge -> mine face
+CHG-005117,yes,clearance,forest edge partly -> mine face
+CHG-000051,yes,water,wetland inundated most of the year from ~2022 (MNDWI stays high); red line 2020 early
+CHG-000208,unsure,,pale crust appears; only water signal was 2019
+CHG-000259,yes,water,coastal salt flat inundated most of the year 2021-24 (MNDWI recurring high) vs dry before
+CHG-000260,yes,water,coastal salt flat inundated most of the year after 2020
+CHG-000289,yes,water,persistent water before 2020 -> mudflat with occasional spikes (water loss)
+CHG-000294,unsure,,salt-flat flooding somewhat longer after 2021; seasonal peaks existed before too
+CHG-000317,no,,coastal mudflat: tidal water frequent before and after
+CHG-000321,unsure,,salt flat by ponds: seasonal flooding, slightly wetter after 2022
+CHG-000470,yes,water,seasonal flooding stops after 2022; field now vegetated (NDVI ~0.5)
+CHG-000661,yes,water,salt flat becomes frequently inundated from 2022
+CHG-000711,yes,water,coastal flat frequently inundated after 2020 vs dry before
+CHG-000892,yes,water,seasonal flooding stops after 2021 (new embankment nearby)
+CHG-001066,yes,water,coastal flat inundated most of the year from 2021
+CHG-001067,yes,water,coastal flat inundated from 2021
+CHG-001136,unsure,,only occasional early MNDWI spikes; area looks stable
+CHG-001146,yes,water,coastal flat inundated from late 2021
+CHG-001705,yes,water,persistent water before 2022 -> mostly dry after 2023
+CHG-001710,yes,water,salt-flat edge frequently inundated after 2022
+CHG-001751,yes,water,coastal strip inundated from 2022 (dark band in after image)
+CHG-001792,yes,water,new salt pans/reservoir cells filled with water from 2022
+CHG-001883,yes,water,coastal strip inundated from 2022
+CHG-001979,yes,water,flooding only from 2025 (reservoir/salt pan?); red line 2022 too early
+CHG-002020,yes,water,crop cycle stops 2023; plot flooded 2024+ (dark water patch)
+CHG-002124,yes,water,new salt-pan/aquaculture cells built (dark rectangles)
+CHG-002132,yes,water,new salt-pan cells built
+CHG-002241,unsure,,coastal flat: MNDWI spikes only modestly more frequent after 2022
+CHG-002247,unsure,,coastal strip: mild MNDWI variability after 2023
+CHG-002264,no,,periodic water both before and after (no regime shift)
+CHG-002417,yes,water,coastal edge inundated persistently from 2023 (MNDWI -0.4 -> +0.7)
+CHG-002466,yes,other,land pooling track grid + crop cycle ends; flooded 2025-26
+CHG-002729,yes,water,persistent water before 2024 -> intermittent after
+CHG-002786,yes,water,dry fields -> persistent wetland/water 2024-26
+CHG-002808,yes,water,field flooded persistently 2024-26; salt-crust plots in after image
+CHG-002831,yes,other,crop cycle stops 2024; only occasional flooding after
+CHG-002854,yes,water,persistent water before 2024 -> mostly dry flat after
+CHG-002857,yes,water,persistent water before 2024 -> mostly dry after
+CHG-002862,yes,water,persistent water before 2024 -> mostly dry after
+CHG-002870,yes,water,dry land -> new pond with structures (2024+)
+CHG-002914,yes,water,crop cycle stops 2024; new dark pond in outline
+CHG-002975,yes,water,persistent water before 2024 -> drier; new embankment/canal nearby
+CHG-002985,yes,water,persistent water before 2024 -> dry after
+CHG-003014,yes,water,dry plots -> flooded wetland 2024-26
+CHG-003021,yes,water,dry flats -> large persistent inundated area 2024-26
+CHG-003024,yes,water,dry flats -> persistent inundation 2024-26
+CHG-003030,yes,water,dry flats -> persistent inundation 2024-26
+CHG-003040,yes,water,new pond/aquaculture cell next to new structures
+CHG-003042,yes,water,dry flats -> persistent inundation 2024-26
+CHG-003043,yes,water,dry flats -> persistent inundation 2024-26
+CHG-003060,yes,water,dry -> inundated 2025-26 at edge of flooded area
+CHG-003080,yes,water,persistent water before 2024 -> intermittent after
+CHG-003083,yes,water,persistent water before 2024 -> mostly dry after
+CHG-003103,unsure,,coastal flat: water regime noisy throughout; new embankment nearby
+CHG-003109,unsure,,coastal flat: water regime noisy throughout
+CHG-003133,yes,water,seasonal flooding stops after 2024; new embankment/structure
+CHG-003231,unsure,,end of series: single monsoon 2025 flood; land pooling tracks
+CHG-003252,unsure,,end of series: single 2025 monsoon flood
+CHG-003417,yes,construction,new bright built structures + pond excavation (2025-26)
+CHG-003430,no,,roadside field flooded in 2025 monsoon only
+CHG-004536,yes,other,mine: pond drained -> dump/haul surface (2020)
+CHG-004569,yes,water,mine settling pond expanded over bare ground 2020
+CHG-000004,no,,river channel: tidal/seasonal water throughout, no road
+CHG-000010,no,,farmland seasonal cycle continues
+CHG-000022,yes,water,persistent coastal water before 2023 -> mostly dry flat; no road visible
+CHG-000054,yes,water,persistent water before 2024 -> dry; no road visible
+CHG-000111,no,,farmland: crop cycle continues; no road
+CHG-000204,no,,farmland seasonal cycle continues
+CHG-000365,no,,farmland seasonal cycle continues (weaker peaks)
+CHG-000761,no,,salt flat: occasional flooding before and after; no road
+CHG-000815,yes,water,coastal water before 2023 -> mostly dry; no road
+CHG-000825,no,,farmland seasonal cycle continues
+CHG-000828,yes,water,coastal water before 2023 -> mostly dry; no road
+CHG-000883,no,,farmland: crop cycle continues after 2021
+CHG-001327,yes,other,crop cycle stops after 2022 (land pooling); no road visible
+CHG-001329,no,,farmland seasonal cycle continues; new track nearby but outside outline
+CHG-001354,yes,road,new track/embankment segment along outline
+CHG-001380,yes,road,new road/track parallel to highway; crop cycle ends 2022
+CHG-001382,unsure,,beside existing road; flooding 2025-26
+CHG-001510,no,,farmland seasonal cycle continues
+CHG-001541,no,,farmland seasonal cycle continues
+CHG-001568,no,,farmland seasonal cycle continues
+CHG-001591,no,,farmland seasonal cycle continues
+CHG-001623,no,,farmland seasonal cycle continues
+CHG-001680,yes,construction,new structures/paving beside road; flooding spikes after
+CHG-001700,no,,farmland seasonal cycle continues
+CHG-001730,yes,water,coastal water before 2023 -> mostly dry; no road
+CHG-001842,no,,farmland seasonal cycle continues; canal built outside outline
+CHG-001846,unsure,,salt flat: wetting frequency changes slightly after 2022
+CHG-001907,no,,farmland seasonal cycle continues
+CHG-001933,yes,road,crop cycle ends 2022 as parallel new road/embankment is built
+CHG-002089,no,,noisy seasonal cycle continues; no road visible
+CHG-002191,yes,road,expressway corridor widened/built 2022; crop cycle ends
+CHG-002206,no,,salt-marsh seasonal cycle continues
+CHG-002451,yes,water,dry flat -> frequent flooding 2024-26
+CHG-002576,no,,farmland seasonal cycle continues
+CHG-002605,no,,farmland seasonal cycle continues
+CHG-003309,yes,road,expressway corridor widened (2025, end of series)
+CHG-003423,unsure,,flood-cycle farmland; end of series
+CHG-003454,yes,road,expressway corridor works 2025 (end of series)
+CHG-003485,unsure,,end of series; no after composite
+CHG-003526,unsure,,end of series; no after composite
+CHG-003579,unsure,,end of series; no after composite
+CHG-003801,yes,road,mangrove beside bridge approach cleared/paved 2021 (road widening)
+CHG-003997,no,,open water/tidal: seasonal MNDWI cycle continues; no road
+CHG-004035,yes,clearance,creekside mangrove cleared 2020 (NDVI 0.8->0.1)
+CHG-004578,yes,other,mine bare ground revegetated after 2022 (NDVI up)
+CHG-004641,yes,clearance,forest edge -> mine haul road/bench (2021)
+CHG-004691,yes,clearance,vegetation -> mine bench/haul road (2021)
+CHG-004819,unsure,,mine area: small MNDWI drop only
+CHG-004941,yes,other,mine bench: dump/haul surface change (NDBI/BSI up 2025)
+CHG-005104,unsure,,end of series; seasonal cycle only
+CHG-000016,yes,water,dry plot -> pond/wetland with persistent water
+CHG-000029,yes,water,coastal water before 2023 -> mostly dry
+CHG-000034,no,,farmland seasonal cycle continues
+CHG-000075,no,,farmland seasonal cycle continues
+CHG-000106,no,,farmland seasonal cycle continues
+CHG-000130,yes,other,bare flat -> seasonally vegetated (NDVI peaks appear from 2021)
+CHG-000143,no,,farmland seasonal cycle continues
+CHG-000164,no,,farmland seasonal cycle continues (flooding 2025)
+CHG-000166,no,,farmland seasonal cycle continues; 2025 monsoon flood only
+CHG-000190,no,,farmland seasonal cycle continues
+CHG-000267,yes,other,crop cycle stops after 2020 (fallow bare)
+CHG-000273,yes,other,bare -> persistently vegetated plot from 2021
+CHG-000298,unsure,,salt flat: new creek/tidal flooding pattern; noisy
+CHG-000301,unsure,,salt flat surface change after 2020 flood; weak signal
+CHG-000323,unsure,,coastal flat: water regime noisy
+CHG-000398,unsure,,salt flat: slight NDVI rise; weak signal
+CHG-000497,no,,creek-side flat: stable after one 2020 flood spike
+CHG-000583,no,,farmland seasonal cycle continues
+CHG-000658,no,,farmland seasonal cycle continues
+CHG-000673,no,,farmland seasonal cycle continues
+CHG-000702,yes,other,bare salt flat -> persistent sparse vegetation from 2022
+CHG-000706,yes,other,bare salt flat -> persistent sparse vegetation from 2022
+CHG-000891,unsure,,noisy farmland; flooding spikes after 2024
+CHG-000902,no,,farmland seasonal cycle continues
+CHG-001018,no,,farmland seasonal cycle continues (weaker peaks)
+CHG-001086,unsure,,salt flat surface changed 2021; weak signal
+CHG-001088,unsure,,salt flat surface changed 2021; weak signal
+CHG-001128,no,,farmland seasonal cycle continues
+CHG-001218,no,,farmland seasonal cycle continues
+CHG-001274,unsure,,creek bank: water regime noisier after 2022
+CHG-001356,no,,farmland seasonal cycle continues
+CHG-001370,no,,farmland seasonal cycle continues
+CHG-001682,yes,other,crop cycle stops after 2022 (land pooling; road works nearby)
+CHG-001773,no,,farmland seasonal cycle continues (weaker)
+CHG-001996,yes,water,crop cycle ends 2023; flooded persistently 2025-26
+CHG-002068,no,,farmland seasonal cycle continues
+CHG-002173,no,,farmland seasonal cycle continues
+CHG-002219,no,,farmland seasonal cycle continues
+CHG-002295,no,,farmland seasonal cycle continues
+CHG-002519,no,,farmland seasonal cycle continues
+CHG-002622,no,,farmland seasonal cycle continues
+CHG-002631,yes,road,new coastal embankment/bund along outline (2023-24)
+CHG-002811,yes,water,dry flat -> flooding 2024-26 (new road grid nearby)
+CHG-002933,unsure,,salt pans nearby; weak signal in outline
+CHG-002956,unsure,,salt flat: slightly more vegetated after 2024
+CHG-002988,unsure,,salt flat by new pans; weak signal
+CHG-003115,unsure,,salt flat: vegetation/wetness up after 2024
+CHG-003161,no,,wetland/vegetation cycle continues
+CHG-003289,unsure,,end of series; farmland
+CHG-003502,unsure,,end of series; no after composite
+CHG-003514,unsure,,end of series; no after composite
+CHG-003635,no,,vegetated embankment: seasonal cycle continues
+CHG-003701,no,,mangrove: seasonal cycle continues
+CHG-003861,yes,other,urban scrub densified: NDVI 0.55 -> 0.75 persistent from 2020 (regrowth)
+CHG-004032,unsure,,mudflat: MNDWI shift 2024 only
+CHG-004048,no,,mangrove/wetland cycle continues
+CHG-004208,no,,forest cycle continues
+CHG-004330,yes,other,urban plot greened 2024 (park/landscaping; NDVI 0.1->0.4)
+CHG-004345,unsure,,dense urban; small shift after 2024
+CHG-004363,yes,other,sports field/plot converted to persistent vegetation 2024 (NDVI 0.3->0.75)
+CHG-004405,unsure,,open water; end of series
+CHG-004571,yes,other,mine dump revegetated: NDVI 0.1 -> seasonal 0.4-0.8 from 2021
+CHG-004587,yes,clearance,forest/scrub -> mine bench 2020 (NDVI 0.5->0.1)
+CHG-004612,no,,forest cycle continues
+CHG-004647,no,,forest/scrub cycle continues
+CHG-004771,yes,other,mine dump reclaimed: bare -> vegetated from 2022
+CHG-004773,yes,other,mine dump reclaimed: bare -> vegetated from 2022
+CHG-004776,no,,village farmland cycle continues
+CHG-004788,yes,other,mine dump reclaimed: bare -> vegetated from 2023
+CHG-004807,yes,other,mine dump reclaimed: bare -> vegetated from 2023
+CHG-004885,yes,other,mine dump reclaimed: bare -> vegetated from 2024
+CHG-004886,no,,village farmland cycle continues
+CHG-004909,no,,forest/scrub cycle continues
+CHG-005037,unsure,,mine dump: small NDVI rise at series end
+CHG-005202,no,,forest: end-of-series false alarm (cycle intact)
+CHG-005243,no,,forest: end-of-series false alarm (cycle intact)
+CHG-005350,no,,forest: end-of-series false alarm (cycle intact)
+CHG-005355,no,,forest: end-of-series false alarm (cycle intact)
+CHG-005412,no,,forest: end-of-series false alarm (cycle intact)
+CHG-005442,no,,forest: end-of-series false alarm (cycle intact)
+CHG-005489,no,,forest: end-of-series false alarm (cycle intact)
+CHG-005493,no,,forest: end-of-series false alarm (cycle intact)
