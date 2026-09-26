@@ -13,6 +13,7 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ../index/schema.sql:/docker-entrypoint-initdb.d/001_schema.sql:ro
+      - ../index/migrations/0002_tile_context.sql:/docker-entrypoint-initdb.d/002_tile_context.sql:ro  # keep in sync with index/migrations
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-sih} -d $${POSTGRES_DB:-sih}"]
       interval: 5s

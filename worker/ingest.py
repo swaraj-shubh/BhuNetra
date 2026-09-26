@@ -19,7 +19,7 @@ from shapely.geometry import Polygon
 from sqlalchemy import Connection, text
 
 from configs.settings import PROCESSING_VERSION, T, aois, paths
-from features import composites, embed_clip
+from features import composites, context, embed_clip
 from governance import audit, lineage
 from index import db, qdrant, reconcile
 from ingest import quality, scene, tiling
@@ -67,6 +67,46 @@ def register_tiles(conn: Connection, aoi: str, tiles: list[tiling.Tile], epsg: i
             for t in tiles
         ],
     )
+
+
+def register_context(aoi: str, tiles: list[tiling.Tile], epsg: int) -> str:
+    """Per-tile distance to water/road (M4). Skipped when stored lineage has the same inputs and params."""
+    ctx = context.compute(aoi, tiles, epsg)
+    with db.engine().begin() as conn:
+        stored = {
+            r[0]: r[1]
+            for r in conn.execute(
+                text(
+                    "SELECT DISTINCT ON (c.target) c.target, c.lineage FROM tile_context c "
+                    "JOIN tiles t USING (tile_id) WHERE t.aoi = :a"
+                ),
+                {"a": aoi},
+            )
+        }
+        if all(stored.get(k) == lin for k, (_, lin) in ctx.items()):
+            return "skipped"
+        conn.execute(
+            text("DELETE FROM tile_context WHERE tile_id IN (SELECT tile_id FROM tiles WHERE aoi = :a)"),
+            {"a": aoi},
+        )
+        for target, (dist, lin) in ctx.items():
+            conn.execute(
+                text(
+                    "INSERT INTO tile_context (tile_id, target, dist_m, lineage) "
+                    "VALUES (:t, :g, :d, CAST(:l AS jsonb))"
+                ),
+                [
+                    {"t": t.tile_id, "g": target, "d": float(d), "l": json.dumps(lin)}
+                    for t, d in zip(tiles, dist, strict=True)
+                ],
+            )
+        audit.append(
+            conn,
+            ACTOR,
+            "ingest.context",
+            {"aoi": aoi, "targets": {k: v[1]["n_features"] for k, v in ctx.items()}},
+        )
+    return "written"
 
 
 def ingest_scene(folder: Path, tiles: list[tiling.Tile]) -> str:
@@ -271,6 +311,8 @@ def ingest_aoi(aoi: str) -> dict:
     tiles, epsg = _tiles(aoi)
     with db.engine().begin() as conn:
         register_tiles(conn, aoi, tiles, epsg)
+    with timed("context", aoi=aoi):
+        counts_ctx = register_context(aoi, tiles, epsg)
     src_dir = paths.raw / aois[aoi].optical_source / aoi  # one optical source per AOI time series (M3b)
     folders = sorted(p for p in src_dir.iterdir() if (p / "scene.json").exists())
     counts: dict[str, int] = defaultdict(int)
@@ -307,7 +349,7 @@ def ingest_aoi(aoi: str) -> dict:
                 {"aoi": aoi, "postgis_vectors": in_db, "qdrant_points": in_qdrant, "fix": "make reconcile"}
             )
         )
-    return dict(counts) | {"postgis_vectors": in_db, "qdrant_points": in_qdrant}
+    return dict(counts) | {"context": counts_ctx, "postgis_vectors": in_db, "qdrant_points": in_qdrant}
 
 
 if __name__ == "__main__":

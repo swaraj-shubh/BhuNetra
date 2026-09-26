@@ -7,16 +7,32 @@ import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 maplibregl.setWorkerUrl(workerUrl);
 
 // DESIGN.md §12: every site carries provenance. No basemap: the demo runs offline (§2.8).
+type SiteEvent = { event_id: string; change_type: string; confidence: number; earliest_supported_date: string };
 type Site = {
   rank: number;
   tile_id: string;
   aoi: string;
-  season: string;
+  season: string | null;
   score: number;
-  q_mean: number;
+  q_mean: number | null;
+  parts: Record<string, number>;
+  member_tiles: string[];
+  dist_m: Record<string, number>;
+  events: SiteEvent[];
   geometry: GeoJSON.Polygon;
-  chip_url: string;
-  provenance: { scene_ids: string[]; model_versions: Record<string, string>; cascade_version: string | null };
+  chip_url: string | null;
+  provenance: { scene_ids: string[]; model_versions: Record<string, string>; cascade_version: string[] | null };
+};
+type Parsed = {
+  semantic: string;
+  change: boolean;
+  change_types: string[];
+  near: Record<string, number>;
+  date_range: [string | null, string | null] | null;
+  aoi: string | null;
+};
+const WARNING_TEXT: Record<string, string> = {
+  below_resolution: "Individual vehicles/small objects are below Sentinel-2's 10 m resolution: results are a weak, low-confidence signal.",
 };
 
 const AOIS = ["", "dholera", "hasdeo", "navimumbai"];
@@ -29,6 +45,8 @@ export default function App() {
   const [query, setQuery] = useState("");
   const [aoi, setAoi] = useState("");
   const [sites, setSites] = useState<Site[]>([]);
+  const [parsed, setParsed] = useState<Parsed | null>(null);
+  const [warnings, setWarnings] = useState<string[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [status, setStatus] = useState("");
   const [ready, setReady] = useState(false);
@@ -66,6 +84,7 @@ export default function App() {
     }
     chipIds.current = [];
     sites.forEach((s) => {
+      if (!s.chip_url) return; // event-only site without a composite chip
       const id = `chip-${s.rank}`;
       const ring = s.geometry.coordinates[0]; // lower-left, lower-right, upper-right, upper-left, closed
       m.addSource(id, {
@@ -109,6 +128,8 @@ export default function App() {
       if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
       const body = await r.json();
       setSites(body.sites);
+      setParsed(body.parsed);
+      setWarnings(body.warnings ?? []);
       setSelected(null);
       setStatus(`${body.sites.length} sites · ${Math.round(performance.now() - t0)} ms`);
     } catch (err) {
@@ -117,6 +138,13 @@ export default function App() {
   }
 
   const sel = sites.find((s) => s.tile_id === selected);
+  const understood = parsed && [
+    parsed.change ? `change: ${parsed.change_types.join("/") || "any type"}` : null,
+    Object.keys(parsed.near).length ? `near ${Object.entries(parsed.near).map(([t, m]) => `${t} ≤${m / 1000} km`).join(", ")}` : null,
+    parsed.date_range ? `dates ${parsed.date_range[0] ?? "…"} → ${parsed.date_range[1] ?? "…"}` : null,
+    parsed.aoi ? `in ${parsed.aoi}` : null,
+    `meaning: “${parsed.semantic}”`,
+  ].filter(Boolean).join(" · ");
   return (
     <div className="app">
       <aside>
@@ -131,15 +159,28 @@ export default function App() {
           <button type="submit">Search</button>
         </form>
         <p className="status">{status}</p>
+        {understood && <p className="note">Understood: {understood}</p>}
+        {warnings.map((w) => (
+          <p key={w} className="note warn">{WARNING_TEXT[w] ?? w}</p>
+        ))}
         <p className="note">Sentinel-2, 10 m: finds land cover and large structures, not individual vehicles or small buildings.</p>
         <ol className="results">
           {sites.map((s) => (
             <li key={s.tile_id} className={s.tile_id === selected ? "sel" : ""} onClick={() => setSelected(s.tile_id)}>
-              <img src={s.chip_url} alt="" width={64} height={64} />
+              {s.chip_url ? <img src={s.chip_url} alt="" width={64} height={64} /> : <div className="nochip" />}
               <div>
                 <b>#{s.rank}</b> {s.tile_id}
                 <br />
-                {s.season} · score {s.score.toFixed(3)} · q {s.q_mean.toFixed(2)}
+                {s.season ?? "—"} · score {s.score.toFixed(3)}
+                {s.q_mean !== null && <> · q {s.q_mean.toFixed(2)}</>}
+                {s.events.length > 0 && (
+                  <>
+                    <br />
+                    {s.events.length} event(s): {[...new Set(s.events.map((e) => e.change_type))].join(", ")} · from{" "}
+                    {s.events.map((e) => e.earliest_supported_date).sort()[0]}
+                  </>
+                )}
+                {"water" in s.dist_m && <> · water {Math.round(s.dist_m.water)} m</>}
               </div>
             </li>
           ))}
@@ -148,7 +189,11 @@ export default function App() {
           <section className="prov">
             <h2>Provenance</h2>
             <p>Scenes: {sel.provenance.scene_ids.join(", ")}</p>
-            <p>Models: {Object.entries(sel.provenance.model_versions).map(([k, v]) => `${k}=${v}`).join(", ")}</p>
+            <p>Models: {Object.entries(sel.provenance.model_versions).map(([k, v]) => `${k}=${v}`).join(", ") || "—"}</p>
+            <p>Cascade: {sel.provenance.cascade_version?.join(", ") ?? "—"}</p>
+            <p>Score parts: {Object.entries(sel.parts).map(([k, v]) => `${k} ${v}`).join(" · ")}</p>
+            <p>Tiles in site: {sel.member_tiles.join(", ")}</p>
+            {sel.events.length > 0 && <p>Events: {sel.events.map((e) => e.event_id).join(", ")}</p>}
           </section>
         )}
       </aside>

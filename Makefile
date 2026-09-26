@@ -37,8 +37,8 @@ lint:
 	$(RUN) ruff format --check .
 	$(RUN) mypy --strict change governance   # DESIGN.md §4 (add query when it lands)
 
-db-migrate:
-	$(COMPOSE) exec -T db sh -c 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' < index/schema.sql
+db-migrate:            ## idempotent migrations on top of schema.sql (applied at initdb)
+	for f in index/migrations/*.sql; do echo "== $$f"; 	  $(COMPOSE) exec -T db sh -c 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' < $$f || exit 1; done
 
 stage:                 ## ONLINE, resumable
 	$(RUN) python scripts/stage_data.py all

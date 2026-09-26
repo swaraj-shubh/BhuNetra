@@ -22,6 +22,7 @@ COPY ingest ingest
 COPY features features
 COPY index index
 COPY governance governance
+COPY query query
 COPY api api
 RUN uv sync --frozen --no-dev
 COPY --from=web /web/dist web/dist

@@ -38,8 +38,9 @@ def _reset_db() -> None:
     with eng.begin() as c:
         c.exec_driver_sql("DROP SCHEMA IF EXISTS public CASCADE")
         c.exec_driver_sql("CREATE SCHEMA public")
-        for stmt in pglast.split((REPO / "index" / "schema.sql").read_text(encoding="utf-8")):
-            c.exec_driver_sql(stmt)
+        for f in [REPO / "index" / "schema.sql", *sorted((REPO / "index" / "migrations").glob("*.sql"))]:
+            for stmt in pglast.split(f.read_text(encoding="utf-8")):
+                c.exec_driver_sql(stmt)
     eng.dispose()
 
 

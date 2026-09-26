@@ -1,4 +1,4 @@
-"""FastAPI app (DESIGN.md §12). M2: /stats, /search/text (no parser yet: M4), composite chips for the map.
+"""FastAPI app (DESIGN.md §12). /stats, /search/text (M4: parser + fusion), /change, /events, map chips.
 
 uvicorn api.main:app --port 8000
 """
@@ -16,11 +16,10 @@ from fastapi.staticfiles import StaticFiles
 from PIL import Image
 from pydantic import BaseModel, Field
 from pyproj import Transformer
-from qdrant_client import models as qm
 from sqlalchemy import text
 
 from configs.settings import T, aois, paths, sources
-from index import db, qdrant
+from index import db
 from ingest import tiling
 from ingest.standardise import rgb_quicklook
 
@@ -87,68 +86,23 @@ def stats() -> dict:
 class TextQuery(BaseModel):
     query: str = Field(min_length=1, max_length=500)
     aoi: str | None = None
-    date_range: tuple[str, str] | None = None  # ISO dates; matches composites whose season overlaps it
+    date_range: tuple[str | None, str | None] | None = (
+        None  # ISO dates; overrides dates parsed from the query
+    )
     sensor: str | None = None  # only sentinel2 composites exist in M2
     k: int = Field(default=T.retrieval.TOP_K_SITES, ge=1, le=200)
 
 
 @app.post("/search/text")
 def search_text(q: TextQuery) -> dict:
-    """Encode the query (the only model call on the query path, §2.1) -> Qdrant text_vec -> best season per tile."""
-    from features import embed_clip  # torch import only when searching
+    """Parse -> semantic | change | spatial branches -> fusion -> unique sites (M4, query/retrieve.py)."""
+    from query import parser, retrieve
 
     t0 = time.perf_counter()
-    must: list = []
-    if q.aoi:
-        must.append(qm.FieldCondition(key="aoi", match=qm.MatchValue(value=q.aoi)))
-    if q.date_range:
-        must += [
-            qm.FieldCondition(key="end_date", range=qm.DatetimeRange(gte=q.date_range[0])),
-            qm.FieldCondition(key="start_date", range=qm.DatetimeRange(lte=q.date_range[1])),
-        ]
-    hits = qdrant.search(embed_clip.embed_text(q.query), "text_vec", T.retrieval.TOP_N, qm.Filter(must=must))
-    best: dict[str, qm.ScoredPoint] = {}
-    # deterministic order: ties (equal scores) broken by tile then season, so a Qdrant rebuild ranks identically
-    hits = sorted(hits, key=lambda h: (-h.score, h.payload["tile_id"], h.payload["season"]))
-    for h in hits:  # keep each tile's best season
-        best.setdefault(h.payload["tile_id"], h)
-    top = list(best.values())[: q.k]
-
-    with db.engine().connect() as conn:
-        rows = conn.execute(
-            text(
-                "SELECT c.comp_id::text AS comp_id, ST_AsGeoJSON(t.geom) AS geom, c.model_versions, "
-                "c.lineage->'observations' AS obs FROM composites c JOIN tiles t USING (tile_id) "
-                "WHERE c.comp_id = ANY(CAST(:ids AS uuid[]))"
-            ),
-            {"ids": [h.payload["comp_id"] for h in top]},
-        ).mappings()
-        by_comp = {r["comp_id"]: r for r in rows}
-    sites = []
-    for rank, h in enumerate(top, 1):
-        r = by_comp[h.payload["comp_id"]]
-        sites.append(
-            {
-                "rank": rank,
-                "tile_id": h.payload["tile_id"],
-                "aoi": h.payload["aoi"],
-                "season": h.payload["season"],
-                "score": round(h.score, 4),
-                "q_mean": h.payload["q_mean"],
-                "geometry": json.loads(r["geom"]),
-                "chip_url": f"/chips/{h.payload['tile_id']}/{h.payload['season']}.png",
-                "provenance": {
-                    "scene_ids": [o["scene_id"] for o in r["obs"]],
-                    "model_versions": r["model_versions"],
-                    "cascade_version": None,  # no change cascade involved in a semantic hit
-                },
-            }
-        )
+    p = parser.parse(q.query)
+    out = retrieve.search(p, retrieve.Request(aoi=q.aoi, date_range=q.date_range, k=q.k))
     LATENCY_MS["search_text"] = round((time.perf_counter() - t0) * 1000, 1)
-    return {
-        "parsed": {"semantic": q.query, "temporal": q.date_range, "spatial": q.aoi, "sensor": q.sensor},
-        "sites": sites,
-    }
+    return {"parsed": p.as_dict(), **out}
 
 
 CHANGE_TYPES = ("construction", "clearance", "water", "road", "other")

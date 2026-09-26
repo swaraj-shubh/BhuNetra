@@ -15,6 +15,7 @@ from configs.settings import paths
 COLLECTION = "tiles"
 PAYLOAD_INDEXES = {
     "aoi": models.PayloadSchemaType.KEYWORD,
+    "tile_id": models.PayloadSchemaType.KEYWORD,  # M4: score event tiles (MatchAny)
     "season": models.PayloadSchemaType.KEYWORD,
     "start_date": models.PayloadSchemaType.DATETIME,
     "end_date": models.PayloadSchemaType.DATETIME,
@@ -90,3 +91,26 @@ def search(vector, using: str, k: int, query_filter: models.Filter | None = None
         )
         .points
     )
+
+
+def search_best_per_tile(
+    vector, using: str, n_tiles: int, query_filter: models.Filter | None = None
+) -> list[models.ScoredPoint]:
+    """Best-scoring point per tile_id (one grouped query; needs the tile_id payload index)."""
+    if using not in ("text_vec", "eo_vec"):
+        raise ValueError(using)
+    groups = (
+        client()
+        .query_points_groups(
+            COLLECTION,
+            query=list(map(float, vector)),
+            using=using,
+            group_by="tile_id",
+            group_size=1,
+            limit=n_tiles,
+            query_filter=query_filter,
+            with_payload=True,
+        )
+        .groups
+    )
+    return [g.hits[0] for g in groups if g.hits]

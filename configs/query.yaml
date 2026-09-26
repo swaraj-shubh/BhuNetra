@@ -1,0 +1,26 @@
+# Query parser vocabulary (query/parser.py). Offline, rule-based, deterministic. Lower-case; multi-word phrases OK.
+change_cues: [new, newly, recent, recently, built, constructed, appeared, emerging, emerged, expanded, expanding,
+  expansion, developed, cleared, clearing, deforested, deforestation, felled, dug, flooded, flooding, dried, drying,
+  receded, widened, changed, change, changes, growth, grew, "came up", "coming up", "under construction"]
+change_types:        # nouns/verbs that pick the type, only when a change cue is present
+  construction: [built, construction, constructed, building, buildings, structure, structures, settlement, houses,
+    housing, urban, "built-up", industrial, factory, factories, warehouse, warehouses, airport, runway, development]
+  clearance: [cleared, clearing, deforestation, deforested, felled, logging, "forest loss", "tree loss", mining, mine,
+    mines, quarry, quarrying, excavation]
+  water: [flood, flooded, flooding, inundated, inundation, dried, drying, receded, "water level", "water extent",
+    reservoir, pond]
+  road: [road, roads, highway, highways, expressway, track, tracks]
+relations: [near, "close to", "next to", along, beside, "adjacent to", around, alongside, by]
+targets:             # spatial targets with a precomputed per-tile distance (features/context.py)
+  water: [river, rivers, lake, lakes, water, waterbody, "water body", reservoir, creek, canal, sea, coast, coastline,
+    shore, dam, pond, estuary, riverbank]
+  road: [road, roads, highway, highways, expressway]
+sensors:
+  sentinel1: [sar, radar, "sentinel-1", sentinel1, s1]
+  landsat: [landsat]
+  sentinel2: ["sentinel-2", sentinel2, s2, optical]
+below_resolution: [vehicle, vehicles, car, cars, truck, trucks, tank, tanks, aircraft, plane, planes, people, person,
+  tent, tents, boat, boats]
+semantic_drop: [new, newly, recent, recently, changed, change, changes, "came up", "coming up", since, what, which]
+stopwords: [a, an, the, what, which, how, of, in, on, at, with, and, or, show, find, me, all, any, where, are, is, there, locations,
+  places, sites, area, areas]

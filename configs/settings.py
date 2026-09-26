@@ -71,6 +71,20 @@ class Cluster(_Strict):
     UMAP_DIM: int
 
 
+class Context(_Strict):
+    NEAR_M: float  # "near X" = tile within this distance of X (full spatial_fit), linear decay to 0 at 2x
+    WATER_OCCURRENCE_MIN: int  # JRC GSW occurrence % counted as water (0 = never water, not nodata)
+    WATER_MIN_PX: int  # water components smaller than this (JRC 30 m pixels) are speckle
+    ROAD_CLASSES: list[str]  # OSM highway=* values that count as a road
+
+
+class Fusion(_Strict):  # DESIGN.md §7 fusion score
+    w_sim: float
+    w_conf: float
+    w_q: float
+    w_sp: float
+
+
 class Composites(_Strict):
     SEASONS: dict[str, list[int]]  # season name -> calendar months
 
@@ -84,6 +98,7 @@ class Thresholds(_Strict):
     retrieval: Retrieval
     cluster: Cluster
     composites: Composites
+    context: Context
 
 
 class AOI(_Strict):
@@ -120,6 +135,8 @@ T = Thresholds(**_yaml(CONFIGS / "thresholds.yaml"))
 sources: dict = _yaml(CONFIGS / "sources.yaml")
 models: dict = _yaml(CONFIGS / "models.yaml")
 bands: dict = _yaml(CONFIGS / "bands.yaml")
+fusion = Fusion(**_yaml(CONFIGS / "fusion.yaml")["weights"])
+lexicon: dict = _yaml(CONFIGS / "query.yaml")
 aois: dict[str, AOI] = {p.stem: AOI(**_yaml(p)) for p in sorted((CONFIGS / "aoi").glob("*.yaml"))}
 
 

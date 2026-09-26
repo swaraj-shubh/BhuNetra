@@ -9,3 +9,6 @@ retrieval: { TOP_N: 500, TOP_K_SITES: 20, DEDUP_RADIUS_M: 320 }
 cluster:   { MIN_CLUSTER_SIZE: 10, UMAP_DIM: 20 }
 # IMD seasons (M2 decision, 2026-09-26). DJF belongs to the year of its Jan/Feb (Dec 2023 -> 2024-DJF).
 composites: { SEASONS: { "DJF": [12, 1, 2], "MAM": [3, 4, 5], "JJAS": [6, 7, 8, 9], "ON": [10, 11] } }  # quoted: bare ON is YAML true
+# M4 (2026-09-26, untuned defaults, logged in STATUS): spatial context for 'near a river/road'
+context:   { NEAR_M: 1000, WATER_OCCURRENCE_MIN: 25, WATER_MIN_PX: 10,
+             ROAD_CLASSES: [motorway, trunk, primary, secondary, tertiary, motorway_link, trunk_link, primary_link, secondary_link, residential, unclassified] }
