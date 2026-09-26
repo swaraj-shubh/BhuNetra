@@ -108,7 +108,9 @@ def search_text(q: TextQuery) -> dict:
         ]
     hits = qdrant.search(embed_clip.embed_text(q.query), "text_vec", T.retrieval.TOP_N, qm.Filter(must=must))
     best: dict[str, qm.ScoredPoint] = {}
-    for h in hits:  # hits are score-sorted: keep each tile's best season
+    # deterministic order: ties (equal scores) broken by tile then season, so a Qdrant rebuild ranks identically
+    hits = sorted(hits, key=lambda h: (-h.score, h.payload["tile_id"], h.payload["season"]))
+    for h in hits:  # keep each tile's best season
         best.setdefault(h.payload["tile_id"], h)
     top = list(best.values())[: q.k]
 
@@ -147,6 +149,88 @@ def search_text(q: TextQuery) -> dict:
         "parsed": {"semantic": q.query, "temporal": q.date_range, "spatial": q.aoi, "sensor": q.sensor},
         "sites": sites,
     }
+
+
+CHANGE_TYPES = ("construction", "clearance", "water", "road", "other")
+EVENT_COLS = (
+    "e.event_id, e.tile_id, t.aoi, e.change_type::text AS change_type, e.direction::text AS direction, e.confidence, "
+    "e.earliest_supported_date, e.last_normal_date, ST_AsGeoJSON(e.geom) AS geom, e.source_scene_ids, "
+    "e.model_versions, e.cascade_version, e.analyst_status::text AS analyst_status"
+)
+
+
+def _event(r) -> dict:
+    return {
+        "event_id": r["event_id"],
+        "tile_id": r["tile_id"],
+        "aoi": r["aoi"],
+        "change_type": r["change_type"],
+        "direction": r["direction"],
+        "confidence": r["confidence"],
+        "earliest_supported_date": str(r["earliest_supported_date"]),
+        "last_normal_date": str(r["last_normal_date"]) if r["last_normal_date"] else None,
+        "analyst_status": r["analyst_status"],
+        "geometry": json.loads(r["geom"]),
+        "provenance": {
+            "scene_ids": list(r["source_scene_ids"]),
+            "model_versions": r["model_versions"],
+            "cascade_version": r["cascade_version"],
+        },
+    }
+
+
+@app.get("/change")
+def change(
+    aoi: str | None = None,
+    t1: str | None = None,
+    t2: str | None = None,
+    type: str | None = None,  # contract parameter name (DESIGN.md §12) shadows the builtin here only
+    min_conf: float = T.events.OPERATING_CONF,
+) -> dict:
+    """Stored events only: confidence is fixed at ingest (§2.2). Below OPERATING_CONF stays hidden unless asked."""
+    if type is not None and type not in CHANGE_TYPES:
+        raise HTTPException(422, f"type must be one of {CHANGE_TYPES}")
+    t0 = time.perf_counter()
+    where, params = ["e.confidence >= :c"], {"c": min_conf}
+    for cond, key, val in (
+        ("t.aoi = :aoi", "aoi", aoi),
+        ("e.earliest_supported_date >= CAST(:t1 AS date)", "t1", t1),
+        ("e.earliest_supported_date <= CAST(:t2 AS date)", "t2", t2),
+        ("e.change_type = CAST(:type AS change_type)", "type", type),
+    ):
+        if val is not None:
+            where.append(cond)
+            params[key] = val
+    with db.engine().connect() as conn:
+        rows = conn.execute(
+            text(
+                f"SELECT {EVENT_COLS} FROM change_events e JOIN tiles t USING (tile_id) WHERE {' AND '.join(where)} "
+                "ORDER BY e.confidence DESC, e.earliest_supported_date"
+            ),
+            params,
+        ).mappings()
+        out = [_event(r) for r in rows]
+    LATENCY_MS["change"] = round((time.perf_counter() - t0) * 1000, 1)
+    return {"events": out}
+
+
+@app.get("/events/{event_id}")
+def event(event_id: str) -> dict:
+    with db.engine().connect() as conn:
+        r = (
+            conn.execute(
+                text(
+                    f"SELECT {EVENT_COLS}, e.evidence FROM change_events e JOIN tiles t USING (tile_id) "
+                    "WHERE e.event_id = :i"
+                ),
+                {"i": event_id},
+            )
+            .mappings()
+            .first()
+        )
+    if r is None:
+        raise HTTPException(404)
+    return _event(r) | {"evidence": r["evidence"]}
 
 
 @app.get("/chips/{tile_id}/{season}.png")

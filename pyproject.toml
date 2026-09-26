@@ -65,7 +65,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["configs", "ingest", "features", "index", "governance", "api"]
+packages = ["configs", "ingest", "features", "index", "governance", "api", "change", "worker"]
 
 [tool.ruff]
 line-length = 110
@@ -73,3 +73,7 @@ extend-exclude = ["models", "data", "web/vendor", ".venv"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[[tool.mypy.overrides]]
+module = ["rasterio.*", "shapely.*"]  # no stubs shipped; typed code still checks our side (DESIGN.md §4)
+ignore_missing_imports = true

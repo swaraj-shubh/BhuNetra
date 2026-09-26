@@ -8,7 +8,7 @@ OFFLINE := $(COMPOSE) -f docker/compose.offline.yaml
 -include docker/.env
 HOST_ENV := DATABASE_URL=postgresql://$(or $(POSTGRES_USER),sih):$(POSTGRES_PASSWORD)@127.0.0.1:5432/$(or $(POSTGRES_DB),sih)             QDRANT_URL=http://127.0.0.1:6333
 
-.PHONY: up build down up-offline offline-check test lint db-migrate stage ingest ingest-scene reconcile \
+.PHONY: up build change down up-offline offline-check test lint db-migrate stage ingest ingest-scene reconcile \
         audit-verify bench-clip eval report verify-weights stats
 
 up:                    ## start (no rebuild: exporting the CUDA image takes ~10 min even when cached)
@@ -35,7 +35,7 @@ test:
 lint:
 	$(RUN) ruff check .
 	$(RUN) ruff format --check .
-	$(RUN) mypy governance        # add change query as they land (DESIGN.md §4: strict there)
+	$(RUN) mypy --strict change governance   # DESIGN.md §4 (add query when it lands)
 
 db-migrate:
 	$(COMPOSE) exec -T db sh -c 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' < index/schema.sql
@@ -50,6 +50,9 @@ stats:
 # --- land with their milestones (DESIGN.md §13) ---
 ingest:                ## make ingest AOI=<name>   (M2: S2 -> q -> composites -> text_vec)
 	@$(HOST_ENV) $(RUN) python -m worker.ingest $(AOI)
+
+change:                ## make change AOI=<name>   (M3: indices -> harmonic breaks -> events)
+	@$(HOST_ENV) $(RUN) python -m worker.change $(AOI)
 
 ingest-scene:          ## make ingest-scene PATH=<file>   (M9)
 	@echo "not implemented yet (M9)"; exit 1

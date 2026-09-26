@@ -50,7 +50,7 @@ from fastapi.testclient import TestClient
 from api.main import app
 from governance import audit
 from index import db, reconcile
-from worker import ingest
+from worker import change, ingest
 
 
 def search(c: TestClient, q: str) -> list[dict]:
@@ -62,7 +62,11 @@ def search(c: TestClient, q: str) -> list[dict]:
 def main() -> None:
     first = ingest.ingest_aoi("synth")
     again = ingest.ingest_aoi("synth")
+    change_first = change.run("synth")
+    change_again = change.run("synth")
     c = TestClient(app)
+    ev = c.get("/change", params={"aoi": "synth", "min_conf": 0}).json()["events"]
+    detail = c.get(f"/events/{ev[0]['event_id']}").json() if ev else None
     hits = search(c, "bright structure")
     with db.engine().connect() as conn:
         broken = audit.verify(audit.load(conn))
@@ -81,6 +85,10 @@ def main() -> None:
                 "audit_broken_at": broken,
                 "audit_entries": n_audit,
                 "chip_status": chip.status_code if chip else None,
+                "change_first": change_first,
+                "change_again": change_again,
+                "change_events": ev,
+                "event_detail": detail,
             }
         )
     )

@@ -3,6 +3,7 @@
 import json
 import subprocess
 from datetime import UTC, datetime
+from typing import Any
 
 from configs.settings import PROCESSING_VERSION, paths
 
@@ -24,7 +25,9 @@ def now_ts() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
 
 
-def record(kind: str, inputs: dict, params: dict, models: dict | None = None) -> dict:
+def record(
+    kind: str, inputs: dict[str, Any], params: dict[str, Any], models: dict[str, Any] | None = None
+) -> dict[str, Any]:
     return {
         "kind": kind,
         "inputs": inputs,
@@ -36,7 +39,7 @@ def record(kind: str, inputs: dict, params: dict, models: dict | None = None) ->
     }
 
 
-def append(log_name: str, rec: dict) -> None:
+def append(log_name: str, rec: dict[str, Any]) -> None:
     """Append-only JSONL under data/manifests/ (until the PostGIS audit_log exists)."""
     paths.logs.mkdir(parents=True, exist_ok=True)
     with open(paths.logs / f"{log_name}.jsonl", "a", encoding="utf-8") as f:
