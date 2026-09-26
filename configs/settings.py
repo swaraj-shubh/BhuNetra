@@ -137,6 +137,7 @@ models: dict = _yaml(CONFIGS / "models.yaml")
 bands: dict = _yaml(CONFIGS / "bands.yaml")
 fusion = Fusion(**_yaml(CONFIGS / "fusion.yaml")["weights"])
 lexicon: dict = _yaml(CONFIGS / "query.yaml")
+eval_cfg: dict = _yaml(CONFIGS / "eval.yaml")
 aois: dict[str, AOI] = {p.stem: AOI(**_yaml(p)) for p in sorted((CONFIGS / "aoi").glob("*.yaml"))}
 
 

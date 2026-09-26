@@ -1,0 +1,32 @@
+{
+ "config": {
+  "BLOCK_M": 10240,
+  "HELDOUT_FRAC": 0.3,
+  "SALT": "sih26227-m5-v1"
+ },
+ "aois": {
+  "dholera": {
+   "heldout_blocks": [
+    "dholera_b0_0",
+    "dholera_b2_0"
+   ],
+   "n_tiles": 4095,
+   "n_heldout_tiles": 1023
+  },
+  "hasdeo": {
+   "heldout_blocks": [
+    "hasdeo_b0_0",
+    "hasdeo_b2_1"
+   ],
+   "n_tiles": 4095,
+   "n_heldout_tiles": 1025
+  },
+  "navimumbai": {
+   "heldout_blocks": [
+    "navimumbai_b0_1"
+   ],
+   "n_tiles": 3906,
+   "n_heldout_tiles": 961
+  }
+ }
+}

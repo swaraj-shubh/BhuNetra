@@ -1,0 +1,19 @@
+# M5 evaluation config (2026-09-26). Label *definitions* and the split, never tuned against results.
+split:                  # DESIGN.md §18 C6 -> spatial blocks (team decision 2026-09-26)
+  BLOCK_M: 10240        # >= 10 km, multiple of STRIDE_M; each 20 km AOI = 2 x 2 blocks
+  HELDOUT_FRAC: 0.3     # per AOI: round(frac * n_blocks) blocks with the lowest salted hash are held out (min 1)
+  SALT: "sih26227-m5-v1"  # changing it re-draws the split: never do that after results are seen
+io_lulc:                # Impact Observatory annual LULC classes (from the staged STAC item's file:values)
+  classes: { water: 1, trees: 2, flooded_vegetation: 4, crops: 5, built: 7, bare: 8, snow: 9, clouds: 10, rangeland: 11 }
+  nodata: [0, 10]       # no data, clouds
+  years: [2018, 2023]   # staged range
+weak_labels:            # event footprint composition, IO year before vs year after (eval/weak_labels.py)
+  MIN_FRAC: 0.20        # a class must gain/lose >= 20 % of the footprint to count as that change
+  STABLE_MAX: 0.05      # total composition change <= 5 % (and no new road) -> false alarm
+  MIN_VALID_FRAC: 0.8   # footprint pixels with valid IO labels in both years
+  ROAD_MIN_M: 100       # new OSM road length inside the footprint (+1 tile margin not applied) for a road change
+labelling:              # M5 human labelling sample (eval/sample_events.py): per split, per change_type quota
+  SEED: 20260926
+  quota:
+    calibration: { construction: 70, clearance: 38, water: 60, road: 50, other: 82 }
+    heldout:     { construction: 35, clearance: 15, water: 30, road: 25, other: 45 }
