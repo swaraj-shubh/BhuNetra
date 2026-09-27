@@ -9,6 +9,7 @@ calibration through a versioned re-run (§2.2); `evidence.calibrated` says which
 
 from collections.abc import Iterable
 from dataclasses import dataclass
+from datetime import date
 from typing import Any
 
 import numpy as np
@@ -23,7 +24,7 @@ from change.classify import Evidence, classify
 from configs.settings import T as CFG
 from features.composites import season_of
 
-CASCADE_VERSION = "m3-rules-0.2"  # 0.2: dof-corrected sigma + effect-size gate  # bump on any change to harmonic/breaks/classify/events logic or thresholds
+CASCADE_VERSION = "m5b-rules-0.3"  # 0.3: dark-surface rule, road needs an NDVI drop, persistence, 'other' magnitude without NDBI/BSI; 0.2: dof sigma + effect gate  # bump on any change to harmonic/breaks/classify/events logic or thresholds
 
 F32 = NDArray[np.float32]
 
@@ -51,18 +52,22 @@ def _shape_stats(rr: NDArray[np.intp], cc: NDArray[np.intp]) -> tuple[float, flo
     return float(major / minor), float(len(rr) / max(length_px, 1.0))
 
 
-def _magnitude(e: Evidence) -> float:
+def _magnitude(e: Evidence, change_type: str = "construction") -> float:
+    """Effect size relative to the type thresholds. "other" (no rule fired) counts only vegetation / water change:
+    M5b pre-labels: ~45 dholera farmland false alarms had a lone NDBI shift of ~+0.10 (crop cycle intact), which
+    NDBI / CONS_DNDBI turned into full magnitude."""
     c = CFG.classify
-    return min(
-        1.0,
-        max(
-            abs(e.d_ndvi) / abs(c.CLR_DNDVI),
-            e.d_ndbi / c.CONS_DNDBI,
-            e.d_bsi / c.CLR_DBSI,
-            abs(e.d_mndwi) / c.WATER_DMNDWI,
-            0.0,
-        ),
-    )
+    parts = [abs(e.d_ndvi) / abs(c.CLR_DNDVI), abs(e.d_mndwi) / c.WATER_DMNDWI, 0.0]
+    if change_type != "other":
+        parts += [e.d_ndbi / c.CONS_DNDBI, e.d_bsi / c.CLR_DBSI]
+    return min(1.0, max(parts))
+
+
+def persistence(break_date: str, last_date: str) -> float:
+    """Share of MIN_POST_DAYS observed after the break. End-of-series breaks (a few weeks of data) stay stored but
+    fall below the operating confidence until later scenes confirm them (M5b: all < 90 d pre-labels were false)."""
+    span = (date.fromisoformat(last_date) - date.fromisoformat(break_date)).days
+    return min(1.0, max(0.0, span / CFG.events.MIN_POST_DAYS))
 
 
 def extract(pix: dict[str, F32], dates: list[str], transform: Affine, epsg: int) -> list[Event]:
@@ -117,7 +122,9 @@ def extract(pix: dict[str, F32], dates: list[str], transform: Affine, epsg: int)
             )
             ctype, direction = classify(ev)
             size = min(1.0, float(np.sqrt(n / (4 * min_px))))
-            conf = round(coherence * size * _magnitude(ev), 4)
+            pers = persistence(dates[consensus], dates[-1])
+            mag = _magnitude(ev, ctype)
+            conf = round(coherence * size * mag * pers, 4)
             ln = pix["last_normal_idx"].ravel()[fp]
             last_normal = int(np.nanmedian(ln)) if np.isfinite(ln).any() else -1
             geom = shp_transform(to_ll, poly)
@@ -152,7 +159,8 @@ def extract(pix: dict[str, F32], dates: list[str], transform: Affine, epsg: int)
                         "confidence_components": {
                             "coherence": coherence,
                             "size": size,
-                            "magnitude": _magnitude(ev),
+                            "magnitude": mag,
+                            "persistence": pers,
                         },
                         "calibrated": False,
                     },

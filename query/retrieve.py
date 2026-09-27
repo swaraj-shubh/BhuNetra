@@ -109,6 +109,7 @@ def search(p: Parsed, req: Request, vec=None, exclude_tiles: frozenset[str] = fr
         vec = embed_clip.embed_text(p.semantic)
 
     with db.engine().connect() as conn:
+        near = _available_near(conn, p.near, aoi, warnings)
         ev = events(conn, p, aoi, date_range) if p.change else {}
         if p.change:  # change intent: candidates are sites with a matching stored event, re-ranked by meaning
             sem = semantic_for_tiles(vec, sorted(ev))
@@ -119,8 +120,27 @@ def search(p: Parsed, req: Request, vec=None, exclude_tiles: frozenset[str] = fr
         tiles = [t for t in tiles if t not in exclude_tiles]
         if not tiles:
             return {"sites": [], "warnings": warnings}
-        sites = _assemble(conn, tiles, sem, ev, p.near, req.k)
+        sites = _assemble(conn, tiles, sem, ev, near, req.k)
     return {"sites": sites, "warnings": warnings}
+
+
+def _available_near(conn, near: dict[str, float], aoi: str | None, warnings: list[str]) -> dict[str, float]:
+    """Drop spatial targets with no precomputed context in scope (e.g. an organiser AOI without JRC / OSM staged: all distances are Infinity):
+    filtering on them would silently return nothing. The caller reports each dropped target as a warning."""
+    if not near:
+        return near
+    have = {
+        r[0]
+        for r in conn.execute(
+            text(
+                "SELECT DISTINCT c.target FROM tile_context c JOIN tiles t USING (tile_id) "
+                "WHERE c.dist_m < 'Infinity' AND (CAST(:a AS text) IS NULL OR t.aoi = :a)"
+            ),
+            {"a": aoi},
+        )
+    }
+    warnings += [f"spatial_context_unavailable:{t}" for t in near if t not in have]
+    return {t: d for t, d in near.items() if t in have}
 
 
 def _assemble(conn, tiles: list[str], sem: dict, ev: dict, near: dict[str, float], k: int) -> list[dict]:

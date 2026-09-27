@@ -35,8 +35,15 @@ class Model:
 
 
 def baseline_mask(t: F) -> B:
-    """True for observations within the first BASELINE_MONTHS of the series."""
-    return np.asarray(t - t.min() <= CFG.breaks.BASELINE_MONTHS * MONTH_D)
+    """True for observations within the first BASELINE_MONTHS of the series. Sparse series (e.g. clear Landsat
+    scenes: 6 in the first year) extend it to the MIN_BASELINE_OBS-th date, at most BASELINE_MAX_MONTHS; otherwise
+    no pixel gets a model and nothing can ever break (organiser rehearsal, 2026-09-27)."""
+    c = CFG.breaks
+    dt = np.sort(t - t.min())
+    end = c.BASELINE_MONTHS * MONTH_D
+    if np.sum(dt <= end) < c.MIN_BASELINE_OBS and dt.size >= c.MIN_BASELINE_OBS:
+        end = min(dt[c.MIN_BASELINE_OBS - 1], c.BASELINE_MAX_MONTHS * MONTH_D)
+    return np.asarray(t - t.min() <= end)
 
 
 def use_trend(t_baseline: F) -> bool:

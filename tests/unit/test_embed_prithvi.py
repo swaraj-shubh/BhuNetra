@@ -20,9 +20,21 @@ def test_pool_tiles_averages_the_patch_tokens_inside_each_tile():
     assert np.allclose(np.linalg.norm(out, axis=1), 1)  # L2-normalised
 
 
-def test_pool_tiles_rejects_misaligned_tiles():
+def test_pool_tiles_misaligned_tile_uses_every_overlapped_patch():
+    # ~30 m organiser imagery: 22 px tiles on 16 px patches
+    fmap = np.zeros((4, 4, 2), np.float32)
+    fmap[0:3, 1:3] = [0, 1]  # patches overlapped by a 22 px tile at px (11, 22): rows 0..2, cols 1..2
+    out = pool_tiles(fmap, [(11, 22)], tile_px=22, patch_px=16)
+    assert np.allclose(out[0], [0, 1])
+
+
+def test_bands_used_falls_back_to_broad_nir():
+    from features.embed_prithvi import bands_used
+
+    assert bands_used(["blue", "green", "red", "nir", "swir1", "swir2"])[3] == "nir"
+    assert bands_used(["blue", "green", "red", "nir", "nir_narrow", "swir1", "swir2"])[3] == "nir_narrow"
     with pytest.raises(ValueError):
-        pool_tiles(np.zeros((8, 8, 2), np.float32), [(8, 0)], tile_px=64, patch_px=16)
+        bands_used(["blue", "green", "red", "nir"])
 
 
 def test_normalise_uses_model_card_stats_and_zeroes_nodata():

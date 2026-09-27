@@ -83,6 +83,20 @@ def _state_key(ard_dir: Path) -> str:
     return hashlib.sha256(json.dumps([fps, events.CASCADE_VERSION, cfg], sort_keys=True).encode()).hexdigest()
 
 
+def _pixel_key(ard_dir: Path) -> str:
+    """Inputs of the slow per-pixel pass only (harmonic + breaks + effect gate): event-level rules and thresholds
+    (classify types, confidence) can change without re-running it."""
+    fps = [
+        json.loads(j.read_text(encoding="utf-8"))["fingerprint"]
+        for j in sorted(ard_dir.glob("????-??-??.json"))
+    ]
+    cfg = T.model_dump(include={"quality", "breaks", "composites"})
+    gate = {i: cascade.min_shift(i) for i in ("ndvi", "mndwi", "ndbi", "bsi")}
+    return hashlib.sha256(
+        json.dumps([fps, cascade.PIXEL_VERSION, cfg, gate], sort_keys=True).encode()
+    ).hexdigest()
+
+
 def _tile_of(tiles: list[tiling.Tile], x: float, y: float) -> str:
     centres = np.array(
         [((t.bounds_m[0] + t.bounds_m[2]) / 2, (t.bounds_m[1] + t.bounds_m[3]) / 2) for t in tiles]
@@ -114,16 +128,17 @@ def run(aoi: str) -> dict:
     pix_key = (
         out_dir / "pixels.json"
     )  # the per-pixel pass is the slow part (~15 min/AOI): reuse it when inputs match
+    pkey = _pixel_key(ard_dir)
     if (
         (out_dir / "pixels.tif").exists()
         and pix_key.exists()
-        and json.loads(pix_key.read_text(encoding="utf-8")) == key
+        and json.loads(pix_key.read_text(encoding="utf-8")) == pkey
     ):
         s = cascade.series(ard_dir)
     else:
         with timed("cascade", aoi=aoi):
             s = cascade.run(ard_dir, out_dir / "pixels.tif")
-        pix_key.write_text(json.dumps(key), encoding="utf-8")
+        pix_key.write_text(json.dumps(pkey), encoding="utf-8")
     with rasterio.open(out_dir / "pixels.tif") as d:
         pix = {b: d.read(i + 1) for i, b in enumerate(cascade.BANDS)}
         transform = d.transform
@@ -171,10 +186,10 @@ def run(aoi: str) -> dict:
                     "INSERT INTO change_events (tile_id, geom, change_type, direction, confidence, last_normal_date, "
                     "earliest_supported_date, sensors, source_scene_ids, evidence, model_versions, cascade_version) "
                     "VALUES (:tile, ST_GeomFromText(:wkt, 4326), CAST(:ct AS change_type), CAST(:dir AS change_direction), "
-                    ":conf, CAST(:ln AS date), CAST(:es AS date), ARRAY['sentinel2'], :scenes, CAST(:ev AS jsonb), "
+                    ":conf, CAST(:ln AS date), CAST(:es AS date), ARRAY[:sensor], :scenes, CAST(:ev AS jsonb), "
                     "CAST(:mv AS jsonb), :cv)"
                 ),
-                [r | {"cv": events.CASCADE_VERSION} for r in rows],
+                [r | {"cv": events.CASCADE_VERSION, "sensor": aois[aoi].optical_source} for r in rows],
             )
         audit.append(
             conn,

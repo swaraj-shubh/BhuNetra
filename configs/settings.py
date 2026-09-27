@@ -38,6 +38,7 @@ class Breaks(_Strict):
     R_MAX: float
     K_PERSIST: int
     BASELINE_MONTHS: int
+    BASELINE_MAX_MONTHS: int  # sparse series: baseline grows to MIN_BASELINE_OBS dates, at most this long
     TREND_MIN_MONTHS: int  # fit the c*t trend only when the baseline spans this long (M3 decision)
     MIN_BASELINE_OBS: int  # fewer valid baseline obs -> pixel not modelled
     SIGMA_MIN: float  # floor on the robust sigma (index units): near-constant pixels would break on noise
@@ -52,12 +53,17 @@ class Classify(_Strict):
     WATER_FRAC: float
     ROAD_ELONG: float
     ROAD_WIDTH_PX: int
+    ROAD_DNDVI: float  # elongated NDBI rise = road only with at least this NDVI drop
+    DARK_DMNDWI: float  # MNDWI rise + vegetation loss, no water extent change = dark surface (mine)
 
 
 class Events(_Strict):
     OPERATING_CONF: float
     TARGET_PRECISION: float
     MIN_EVENT_PX: int  # connected break pixels needed for an event (25 px = 0.25 ha at 10 m)
+    MIN_POST_DAYS: (
+        int  # break -> end of series span for full confidence (shorter = end-of-series, provisional)
+    )
 
 
 class Retrieval(_Strict):

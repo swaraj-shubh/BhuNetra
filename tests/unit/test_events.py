@@ -72,3 +72,30 @@ def test_timelines_medians_per_date():
     d1 = {"ndvi": np.full((4, 4), 0.5, np.float32)}
     d2 = {"ndvi": np.full((4, 4), np.nan, np.float32)}  # cloudy date: no value
     assert events.timelines([fp], [d1, d2]) == [{"ndvi": [0.5, None]}]
+
+
+def test_persistence_scales_end_of_series_breaks():
+    from change.events import persistence
+    from configs.settings import T
+
+    assert persistence("2026-04-14", "2026-06-05") < 0.5  # ~7 weeks after the break
+    assert persistence("2025-06-08", "2026-06-05") == 1.0
+    assert persistence("2026-06-05", "2026-06-05") == 0.0
+    d = T.events.MIN_POST_DAYS
+    assert (
+        persistence(
+            "2026-01-01", str(__import__("datetime").date(2026, 1, 1) + __import__("datetime").timedelta(d))
+        )
+        == 1.0
+    )
+
+
+def test_other_magnitude_ignores_lone_ndbi_shift():
+    from change.classify import Evidence
+    from change.events import _magnitude
+
+    farmland = Evidence(0.01, -0.1, 0.10, 0.08, 0.0, 0.0, 1.5, 5.0)  # crop cycle intact, NDBI +0.10
+    assert _magnitude(farmland, "construction") == 1.0
+    assert _magnitude(farmland, "other") < 0.5
+    regrowth = Evidence(0.3, -0.2, -0.05, -0.02, 0.0, 0.0, 1.5, 5.0)
+    assert _magnitude(regrowth, "other") == 1.0

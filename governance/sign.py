@@ -9,6 +9,7 @@ import base64
 import hashlib
 import json
 from pathlib import Path
+from typing import Any
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import serialization
@@ -49,7 +50,7 @@ def key_id(pem: bytes) -> str:
     return sha256_hex(pem)[:16]
 
 
-def build_package(files: dict[str, bytes], key: Ed25519PrivateKey, meta: dict) -> dict[str, bytes]:
+def build_package(files: dict[str, bytes], key: Ed25519PrivateKey, meta: dict[str, Any]) -> dict[str, bytes]:
     if not files or any(n in RESERVED for n in files):
         raise ValueError("need at least one file and no reserved names")
     pem = public_pem(key)
@@ -66,7 +67,7 @@ def build_package(files: dict[str, bytes], key: Ed25519PrivateKey, meta: dict) -
     return dict(files) | {"manifest.json": manifest, "manifest.sig": sig, "public_key.pem": pem}
 
 
-def verify_package(pkg: dict[str, bytes], trusted_public_pem: bytes | None = None) -> dict:
+def verify_package(pkg: dict[str, bytes], trusted_public_pem: bytes | None = None) -> dict[str, Any]:
     problems: list[str] = []
     try:
         manifest = json.loads(pkg["manifest.json"])

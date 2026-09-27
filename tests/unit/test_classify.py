@@ -56,3 +56,17 @@ def test_construction_vs_clearance_takes_the_stronger_rule():
     assert classify(e)[0] == "construction"
     e2 = ev(d_ndvi=-0.3, d_ndbi=C.CONS_DNDBI + 0.01, d_bsi=C.CLR_DBSI + 0.2)
     assert classify(e2)[0] == "clearance"
+
+
+def test_dark_surface_vegetation_loss_is_clearance_not_construction():
+    # forest -> coal/mine face: NDBI rises past the construction rule, but MNDWI rises without water extent change
+    e = ev(
+        d_ndvi=-0.45, d_ndbi=0.16, d_bsi=0.10, d_mndwi=C.DARK_DMNDWI + 0.05, water_pre=0.0, water_post=0.02
+    )
+    assert classify(e) == ("clearance", "disappearance")
+
+
+def test_road_needs_vegetation_loss():
+    # elongated strip with only an NDBI rise (tidal flat, revegetated haul road) is not a road
+    e = ev(d_ndvi=0.2, d_ndbi=0.1, elongation=C.ROAD_ELONG + 2, width_px=C.ROAD_WIDTH_PX)
+    assert classify(e)[0] != "road"

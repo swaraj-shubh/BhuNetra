@@ -177,3 +177,22 @@ def test_restaging_is_a_noop_and_never_overwrites(tmp_path):
     }
     assert local.stage([src], **kw)[0]["status"] == "staged"
     assert local.stage([src], **kw)[0]["status"] == "exists"  # raw is write-once (§2.12)
+
+
+def test_existing_aoi_with_other_optical_source_is_rejected(tmp_path):
+    # a hand-written AOI file without optical_source would make `make ingest` ignore the staged files
+    (tmp_path / "aoi").mkdir()
+    (tmp_path / "aoi" / "orgy.yaml").write_text(
+        "name: orgy\nbbox: [73.0, 19.0, 73.1, 19.1]\n", encoding="utf-8"
+    )
+    red = np.full((50, 50), 1200)
+    src = _tif(
+        tmp_path / "x_2024-02-10.tif",
+        [red, red, red, red],
+        descriptions=["red", "green", "blue", "nir"],
+        tags={"scale_factor": "0.0001"},
+    )
+    with pytest.raises(local.LocalStageError, match="optical_source"):
+        local.stage(
+            [src], aoi="orgy", source="organiser", raw_root=tmp_path / "raw", aoi_dir=tmp_path / "aoi"
+        )

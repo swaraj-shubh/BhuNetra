@@ -183,3 +183,16 @@ def test_dedup_collapses_overlapping_tiles_into_one_site():
     sites = dedup(fuse(cands, {}, W), r)
     assert [s.head.cand.tile_id for s in sites] == ["t0", "t2"]
     assert [m.cand.tile_id for m in sites[0].members] == ["t0", "t1"]
+
+
+def test_spatial_targets_without_context_are_dropped_with_a_warning():
+    from query.retrieve import _available_near
+
+    class Conn:  # only 'road' has a finite distance in scope
+        def execute(self, *_):
+            return [("road",)]
+
+    warnings: list[str] = []
+    assert _available_near(Conn(), {"water": 1000.0, "road": 500.0}, "x", warnings) == {"road": 500.0}
+    assert warnings == ["spatial_context_unavailable:water"]
+    assert _available_near(Conn(), {}, "x", warnings) == {}

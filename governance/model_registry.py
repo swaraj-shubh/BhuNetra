@@ -3,6 +3,7 @@
 import hashlib
 from functools import lru_cache
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -21,7 +22,7 @@ def _sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-def manifest(manifest_path: Path | None = None) -> dict:
+def manifest(manifest_path: Path | None = None) -> dict[str, Any]:
     return (
         yaml.safe_load((manifest_path or paths.manifests / "models.yaml").read_text(encoding="utf-8")) or {}
     )

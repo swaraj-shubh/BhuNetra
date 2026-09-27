@@ -19,6 +19,8 @@ from change import breaks, harmonic
 from configs.settings import T as CFG
 from features import indices
 
+PIXEL_VERSION = "1"  # bump on any change to harmonic / breaks / block() (invalidates cached pixels.tif)
+
 BANDS = ("break_idx", "last_normal_idx", "d_ndvi", "d_mndwi", "d_ndbi", "d_bsi", "water_pre", "water_post")
 BLOCK_ROWS = 64  # ~135k px x ~80 dates x 4 indices per block: a few hundred MB
 

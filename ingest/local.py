@@ -176,7 +176,13 @@ def stage(
 
     aoi_file = aoi_dir / f"{aoi}.yaml"
     if aoi_file.exists():
-        bbox = tuple(yaml.safe_load(aoi_file.read_text(encoding="utf-8"))["bbox"])
+        cfg = yaml.safe_load(aoi_file.read_text(encoding="utf-8"))
+        if cfg.get("optical_source", "sentinel2") != source:  # ingest reads only the AOI's optical_source
+            raise LocalStageError(
+                f"{aoi_file.name} has optical_source {cfg.get('optical_source', 'sentinel2')!r}; add "
+                f"'optical_source: {source}' (or remove the file to have it generated) so make ingest reads these files"
+            )
+        bbox = tuple(cfg["bbox"])
     else:
         ll = [transform_bounds(i["crs"], 4326, *i["bounds"]) for i in infos]
         bbox = (min(b[0] for b in ll), min(b[1] for b in ll), max(b[2] for b in ll), max(b[3] for b in ll))

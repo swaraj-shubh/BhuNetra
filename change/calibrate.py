@@ -17,7 +17,7 @@ class Calibration:
     version: str = "uncalibrated"
 
     def predict(self, raw: np.ndarray) -> np.ndarray:
-        return np.interp(np.asarray(raw, dtype=float), self.x, self.p)
+        return np.asarray(np.interp(np.asarray(raw, dtype=float), self.x, self.p))
 
     def to_json(self) -> str:
         return json.dumps({"x": self.x, "p": self.p, "version": self.version})

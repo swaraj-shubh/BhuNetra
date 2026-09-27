@@ -9,6 +9,7 @@ import logging
 import sys
 
 import numpy as np
+import rasterio
 from sqlalchemy import text
 
 from configs.settings import aois, paths
@@ -29,7 +30,6 @@ def run(aoi: str, full_sync: bool = True) -> dict:
     tiles = {t.tile_id: t for t in tiling.tiles(aoi, bounds, epsg)}
     lat, lon = (a.bbox[1] + a.bbox[3]) / 2, (a.bbox[0] + a.bbox[2]) / 2
     ver = embed_prithvi.version()
-    tile_len = round(tiling.T.tiling.TILE_M / 10)  # composites are on the 10 m grid
     counts = {"built": 0, "skipped": 0}
     with db.engine().connect() as conn:
         seasons = conn.execute(
@@ -55,11 +55,15 @@ def run(aoi: str, full_sync: bool = True) -> dict:
                     {"a": aoi, "s": season},
                 )
             ]
+        side = json.loads((paths.composites / aoi / f"{season}.json").read_text(encoding="utf-8"))
+        with rasterio.open(paths.composites / aoi / side["file"]) as ds:  # any GSD (10 m S2, ~30 m organiser)
+            gsd, names = ds.res[0], list(ds.descriptions)
+        tile_len = round(tiling.T.tiling.TILE_M / gsd)
         offs = [
-            (round((bounds[3] - tiles[i].bounds_m[3]) / 10), round((tiles[i].bounds_m[0] - bounds[0]) / 10))
+            (round((bounds[3] - tiles[i].bounds_m[3]) / gsd), round((tiles[i].bounds_m[0] - bounds[0]) / gsd))
             for i in ids
         ]
-        side = json.loads((paths.composites / aoi / f"{season}.json").read_text(encoding="utf-8"))
+        used = embed_prithvi.bands_used(names)
         mid = str(np.datetime64(start) + (np.datetime64(end) - np.datetime64(start)) // 2)
         with timed("embed_eo", aoi=aoi, season=season, n=len(ids)):
             vecs = embed_prithvi.embed_composite(
@@ -77,7 +81,10 @@ def run(aoi: str, full_sync: bool = True) -> dict:
                     "j": json.dumps(
                         {t: [round(float(x), 6) for x in v] for t, v in zip(ids, vecs, strict=True)}
                     ),
-                    "m": json.dumps({"eo_vec": ver}),
+                    "m": json.dumps(
+                        {"eo_vec": ver}
+                        | ({"eo_vec_bands": used} if used != list(embed_prithvi.BANDS) else {})
+                    ),
                     "s": season,
                 },
             )

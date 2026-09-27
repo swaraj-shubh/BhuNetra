@@ -159,3 +159,14 @@ def test_small_persistent_shift_is_significant_but_gated_out():
     flat = np.full(ndvi.shape, 0.1) + RNG.normal(0, 0.005, ndvi.shape)
     out = cascade.block({"ndvi": ndvi, "mndwi": flat - 0.4, "ndbi": flat.copy(), "bsi": flat.copy()}, T_DAYS)
     assert np.isnan(out["break_idx"]).all()
+
+
+def test_sparse_series_extends_baseline_to_min_obs():
+    MONTH_D = harmonic.MONTH_D
+
+    c = T.breaks
+    t = np.array([0, 40, 80, 120, 160, 300, 400, 450, 500, 560, 700, 800], float)  # 6 dates in year one
+    m = harmonic.baseline_mask(t)
+    assert m.sum() == c.MIN_BASELINE_OBS and m[: c.MIN_BASELINE_OBS].all()
+    dense = np.arange(0, 800, 30, dtype=float)  # >= MIN_BASELINE_OBS in 12 months: unchanged
+    assert np.array_equal(harmonic.baseline_mask(dense), dense <= c.BASELINE_MONTHS * MONTH_D)

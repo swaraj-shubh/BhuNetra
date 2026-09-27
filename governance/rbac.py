@@ -8,6 +8,7 @@ import hashlib
 import secrets
 import sys
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -21,7 +22,7 @@ def _h(key: str) -> str:
     return hashlib.sha256(key.encode()).hexdigest()
 
 
-def load(path: Path = USERS) -> dict[str, dict] | None:
+def load(path: Path = USERS) -> dict[str, dict[str, Any]] | None:
     """key_sha256 -> {name, role}; None when auth is disabled (no users file)."""
     if not path.exists():
         return None
@@ -29,7 +30,7 @@ def load(path: Path = USERS) -> dict[str, dict] | None:
     return {u["key_sha256"]: {"name": u["name"], "role": u["role"]} for u in data.get("users", [])}
 
 
-def authorize(users: dict[str, dict] | None, key: str | None, need: str) -> dict:
+def authorize(users: dict[str, dict[str, Any]] | None, key: str | None, need: str) -> dict[str, Any]:
     """Returns the user; raises PermissionError (no/unknown key or too low a role)."""
     if users is None:
         return {"name": "anonymous", "role": "admin", "auth": False}

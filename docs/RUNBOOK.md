@@ -26,6 +26,11 @@ records every model / dataset in `manifests/`. Nothing else ever touches the net
    - organiser files (GeoTIFF / COG, offline): `make stage-local FILES="/media/usb/*.tif" AOI=<name>
      [MANIFEST=m.yaml]`. The originals are only read; each file gets sha256 + `scene.json`
      (see `ingest/local.py` for what a manifest can supply: date, sensor, bands, scale/offset, nodata).
+     Easiest: let `stage-local` create `configs/aoi/<name>.yaml` (bbox from the files). A hand-written AOI file
+     needs `optical_source: organiser`, because `make ingest` reads only `data/raw/<optical_source>/<aoi>/`
+     (default `sentinel2`); `stage-local` refuses with that hint otherwise.
+     Example manifest (one multi-band file per date, band names in the TIFF): `sensor: generic`,
+     `scale: 2.75e-05`, `offset: -0.2`, `nodata: 0`.
 
 ## 2. Full index build
 

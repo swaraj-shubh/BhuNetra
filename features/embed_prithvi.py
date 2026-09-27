@@ -48,15 +48,13 @@ def normalise(x: np.ndarray, mean, std) -> np.ndarray:
 def pool_tiles(
     fmap: np.ndarray, offsets: list[tuple[int, int]], tile_px: int, patch_px: int = 16
 ) -> np.ndarray:
-    """fmap (Hp, Wp, D) patch tokens; offsets = tiles' top-left (row_px, col_px). L2-normalised mean per tile."""
-    size = tile_px
-    n = size // patch_px
+    """fmap (Hp, Wp, D) patch tokens; offsets = tiles' top-left (row_px, col_px). L2-normalised mean of the patch
+    tokens each tile overlaps (at 10 m a 64 px tile is exactly 4x4 aligned patches; other GSDs overlap partially)."""
+    p = patch_px
     out = np.empty((len(offsets), fmap.shape[2]), np.float32)
     for i, (r, c) in enumerate(offsets):
-        if r % patch_px or c % patch_px:
-            raise ValueError(f"tile at px ({r}, {c}) is not aligned to {patch_px} px patches")
         v = (
-            fmap[r // patch_px : r // patch_px + n, c // patch_px : c // patch_px + n]
+            fmap[r // p : -(-(r + tile_px) // p), c // p : -(-(c + tile_px) // p)]
             .reshape(-1, fmap.shape[2])
             .mean(0)
         )
@@ -136,5 +134,18 @@ def embed_composite(
     import rasterio
 
     with rasterio.open(tif) as ds:
-        x = np.stack([ds.read(ds.descriptions.index(b) + 1) for b in BANDS]).astype(np.float32)
+        names = list(ds.descriptions)
+        # organiser / Landsat composites may carry only one NIR band: Landsat 8/9 B5 is the narrow NIR itself; for
+        # other sensors broad NIR is the nearest substitute (recorded by the caller via bands_used)
+        x = np.stack([ds.read(names.index(bands_used(names)[i]) + 1) for i in range(len(BANDS))]).astype(
+            np.float32
+        )
     return pool_tiles(feature_map(x, mid_date, lat, lon), tiles_px, tile_px=tile_len_px)
+
+
+def bands_used(names: list[str]) -> list[str]:
+    """Composite band read for each model band (nir_narrow falls back to nir when absent)."""
+    out = [b if b in names or b != "nir_narrow" else "nir" for b in BANDS]
+    if missing := [b for b in out if b not in names]:
+        raise ValueError(f"composite lacks bands {missing} needed by Prithvi")
+    return out
