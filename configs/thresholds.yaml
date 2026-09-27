@@ -12,3 +12,5 @@ composites: { SEASONS: { "DJF": [12, 1, 2], "MAM": [3, 4, 5], "JJAS": [6, 7, 8, 
 # M4 (2026-09-26, untuned defaults, logged in STATUS): spatial context for 'near a river/road'
 context:   { NEAR_M: 1000, WATER_OCCURRENCE_MIN: 25, WATER_MIN_PX: 10,
              ROAD_CLASSES: [motorway, trunk, primary, secondary, tertiary, motorway_link, trunk_link, primary_link, secondary_link, residential, unclassified] }
+# M9 (2026-09-27, untuned, logged in STATUS): Sentinel-1 log-ratio evidence (dB) and before/after windows
+sar:       { MIN_DB: 1.5, WATER_MIN_DB: 3.0, N_BEFORE: 3, N_AFTER: 3 }

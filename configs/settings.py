@@ -85,6 +85,13 @@ class Fusion(_Strict):  # DESIGN.md §7 fusion score
     w_sp: float
 
 
+class Sar(_Strict):
+    MIN_DB: float  # |log-ratio| for construction (VV up) / clearance (VH down) agreement
+    WATER_MIN_DB: float  # |VV log-ratio| for water appearance/disappearance agreement
+    N_BEFORE: int  # S1 acquisitions before last_normal_date used for the "before" median
+    N_AFTER: int  # S1 acquisitions from earliest_supported_date on for the "after" median
+
+
 class Composites(_Strict):
     SEASONS: dict[str, list[int]]  # season name -> calendar months
 
@@ -99,6 +106,7 @@ class Thresholds(_Strict):
     cluster: Cluster
     composites: Composites
     context: Context
+    sar: Sar
 
 
 class AOI(_Strict):
