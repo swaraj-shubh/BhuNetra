@@ -5,7 +5,7 @@ tiling:    { TILE_M: 640, STRIDE_M: 320 }
 breaks:    { R_MAX: 3.0, K_PERSIST: 3, BASELINE_MONTHS: 12, BASELINE_MAX_MONTHS: 24, TREND_MIN_MONTHS: 24, MIN_BASELINE_OBS: 8, SIGMA_MIN: 0.02 }
 classify:  { CONS_DNDVI: -0.15, CONS_DNDBI: 0.08, CLR_DNDVI: -0.20, CLR_DBSI: 0.08, WATER_DMNDWI: 0.25, WATER_FRAC: 0.10, ROAD_ELONG: 4.0, ROAD_WIDTH_PX: 3, DARK_DMNDWI: 0.20, ROAD_DNDVI: -0.05 }
 events:    { OPERATING_CONF: 0.55, TARGET_PRECISION: 0.85, MIN_EVENT_PX: 25, MIN_POST_DAYS: 180 }
-retrieval: { TOP_N: 500, TOP_K_SITES: 20, DEDUP_RADIUS_M: 320 }
+retrieval: { TOP_N: 500, TOP_K_SITES: 20, DEDUP_RADIUS_M: 460 }
 cluster:   { MIN_CLUSTER_SIZE: 10, UMAP_DIM: 20 }
 # IMD seasons (M2 decision, 2026-09-26). DJF belongs to the year of its Jan/Feb (Dec 2023 -> 2024-DJF).
 composites: { SEASONS: { "DJF": [12, 1, 2], "MAM": [3, 4, 5], "JJAS": [6, 7, 8, 9], "ON": [10, 11] } }  # quoted: bare ON is YAML true

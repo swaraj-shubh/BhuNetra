@@ -383,7 +383,7 @@ def search_image(q: ImageQuery, user: dict = VIEWER) -> dict:
         raise HTTPException(404, f"no eo_vec for {q.tile_id} (run make embed-eo)")
     vec, season = seed
     sites = retrieve.search_image(
-        np.asarray(vec, np.float32), q.aoi, q.date_range, q.k, frozenset({q.tile_id})
+        np.asarray(vec, np.float32), q.aoi, q.date_range, q.k, retrieve.overlapping(q.tile_id)
     )
     LATENCY_MS["search_image"] = round((time.perf_counter() - t0) * 1000, 1)
     return {"seed": {"tile_id": q.tile_id, "season": season}, "sites": sites}

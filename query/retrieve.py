@@ -240,12 +240,21 @@ def search_image(
         return _assemble(conn, tiles, sem, {}, {}, k)
 
 
+def overlapping(tile_id: str) -> frozenset[str]:
+    """The tile and every grid tile sharing ground with it (TILE_M = 2 x STRIDE_M: row/col within 1). Image search
+    excludes them: a half-overlapping neighbour "looks like" the seed trivially and is no discovery (PS 2.2.4)."""
+    head, row, col = tile_id.rsplit("_", 2)
+    r, c = int(row), int(col)
+    return frozenset(f"{head}_{r + i:04d}_{c + j:04d}" for i in (-1, 0, 1) for j in (-1, 0, 1))
+
+
 def eo_vector(conn, tile_id: str, season: str | None) -> tuple[list[float], str] | None:
-    """Stored eo_vec of a tile (given season, else its latest season that has one)."""
+    """Stored eo_vec of a tile (given season, else its latest dry-season one: monsoon composites are patchy)."""
     row = conn.execute(
         text(
             "SELECT eo_vec, season FROM composites WHERE tile_id = :t AND eo_vec IS NOT NULL "
-            "AND (CAST(:s AS text) IS NULL OR season = :s) ORDER BY end_date DESC LIMIT 1"
+            "AND (CAST(:s AS text) IS NULL OR season = :s) "
+            "ORDER BY season LIKE '%JJAS', end_date DESC LIMIT 1"
         ),
         {"t": tile_id, "s": season},
     ).first()

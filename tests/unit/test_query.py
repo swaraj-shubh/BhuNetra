@@ -196,3 +196,10 @@ def test_spatial_targets_without_context_are_dropped_with_a_warning():
     assert _available_near(Conn(), {"water": 1000.0, "road": 500.0}, "x", warnings) == {"road": 500.0}
     assert warnings == ["spatial_context_unavailable:water"]
     assert _available_near(Conn(), {}, "x", warnings) == {}
+
+
+def test_image_search_excludes_tiles_sharing_ground_with_the_seed():
+    from query.retrieve import overlapping
+
+    ex = overlapping("navimumbai_43N_0038_0020")
+    assert len(ex) == 9 and "navimumbai_43N_0039_0021" in ex and "navimumbai_43N_0040_0020" not in ex
