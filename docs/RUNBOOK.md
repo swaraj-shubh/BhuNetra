@@ -1,0 +1,91 @@
+# Runbook: index build, incremental ingestion, offline demo, evaluation
+
+Linux host with Docker (Compose v2), NVIDIA driver + container toolkit for the GPU worker (optional: everything
+runs on CPU, slower), `uv`, GNU make. Our reference box: AWS g4dn.xlarge (4 vCPU, 16 GB, Tesla T4), see
+`docs/AWS.md`. All commands from the repo root.
+
+## 0. Before the network goes off (online, once)
+
+```bash
+cp docker/.env.example docker/.env        # set POSTGRES_PASSWORD
+uv sync                                   # host tools (worker CLI, eval)
+make build                                # api/worker image incl. the web bundle (vendored assets, no CDN)
+make stage                                # models + benchmarks + imagery for the configs/aoi/*.yaml AOIs (resumable)
+make verify-weights                       # every model file vs manifests/models.yaml (sha256)
+```
+
+Staging writes `data/raw/<source>/<aoi>/<date>/` (AOI-window extracts + `scene.json` with per-band sha256) and
+records every model / dataset in `manifests/`. Nothing else ever touches the network.
+
+## 1. A new area of interest (e.g. the organisers' AOI)
+
+1. `configs/aoi/<name>.yaml`: `name`, `type`, `why`, `bbox: [lon_min, lat_min, lon_max, lat_max]`.
+   No thresholds per AOI (they are global in `configs/thresholds.yaml`).
+2. Imagery:
+   - public archive while online: `uv run python scripts/stage_data.py series --source all --aoi <name>`;
+   - organiser files (GeoTIFF / COG, offline): `make stage-local FILES="/media/usb/*.tif" AOI=<name>
+     [MANIFEST=m.yaml]`. The originals are only read; each file gets sha256 + `scene.json`
+     (see `ingest/local.py` for what a manifest can supply: date, sensor, bands, scale/offset, nodata).
+
+## 2. Full index build
+
+```bash
+make up                                   # db, qdrant, api, worker
+make build-index AOI=<name>               # empty AOI = all AOIs
+```
+
+`build-index` = `make ingest` (validate → masks + q → tiles → seasonal composites → text_vec → PostGIS → Qdrant;
+spatial context) → `make change` (indices → harmonic + persistent breaks → typed events) → `make embed-eo`
+(Prithvi eo_vec, GPU) → `make sar` (Sentinel-1 evidence). Every step is safe to re-run (ingest skips scenes with a known sha256 and seasons already
+built; eo_vec skips seasons with the current model version); per-stage timings go to `manifests/build.json`.
+
+Measured on the reference box (3 AOIs, 1,253 km², 772 scenes): TODO(measure): clean timed build in progress.
+
+## 3. Incremental ingestion (new acquisition, no rebuild)
+
+```bash
+# via the API (admin key when RBAC is on):
+curl -X POST localhost:8000/ingest -H 'Content-Type: application/json' -H "X-API-Key: $KEY" \
+     -d '{"path": "data/raw/sentinel2/<aoi>/<date>", "aoi": "<aoi>"}'      # -> {job_id}
+curl localhost:8000/jobs/<job_id>                                         # status + timings
+# or on the host:
+make ingest-scene SCENE=data/raw/sentinel2/<aoi>/<date> AOI=<aoi>
+```
+
+The worker validates the scene, rebuilds only its season (composite + text_vec + eo_vec) → searchable, then
+refreshes the AOI's change events and SAR evidence (analyst decisions are kept). Measured: searchable in 254 s,
+change refresh complete in 1,029 s (dholera, 2026-09-23 scene).
+
+## 4. Offline operation
+
+- **Proof that nothing reaches the internet:** `make up-offline` (the app network is `internal: true`) then
+  `make offline-check` (the api answers locally; an external URL fails). Published ports do not work on an
+  internal network, so this mode is for the proof, not for browsing.
+- **Demo:** disconnect the host from the network (unplug / disable the interface), then `make up` and open
+  `http://localhost:8000`. The app loads models from local paths only (`HF_HUB_OFFLINE=1`), and the web bundle
+  has no CDN assets or online basemaps.
+- After a restart Qdrant reads its storage into memory in the background (~20 s for 2.3 GB); queries in that
+  window are slower.
+
+## 5. Evaluation and report
+
+```bash
+make eval QUERIES=queries.json CASES=cases.geojson   # -> eval/reports/<date>_eval.json
+make report                                          # -> eval/reports/<date>_report.md
+```
+
+- `queries.json`: `{"queries": [{"id", "query", "aoi"?, "date_range"?, "relevant": [GeoJSON geometry, …]}]}`
+- `cases.geojson`: features with `{"case_id", "label": "change" | "no_change", "t1", "t2", "type"?, "earliest_date"?}`
+- Scoring uses only the public API (`/search/text`, `/change`) and matches by geometry (EPSG:4326), so hidden
+  sets need no conversion. Our own labels convert with `eval/to_eval_format.py`.
+- The report reads every number from measurements (`/stats`, `manifests/build.json`, the eval output, hardware,
+  model / dataset manifests).
+
+## 6. Integrity checks
+
+```bash
+make audit-verify          # recompute the audit hash chain (also GET /audit/verify)
+make reconcile             # rebuild Qdrant from PostGIS (PostGIS is the source of truth)
+make verify-weights        # model files vs manifests/models.yaml
+make test && make lint
+```

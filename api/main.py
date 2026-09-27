@@ -60,6 +60,30 @@ def _area_km2(bbox: tuple[float, float, float, float]) -> float:
     return (x1 - x0) * (y1 - y0) / 1e6
 
 
+def _index_stats() -> dict | None:
+    """Row counts + PostGIS size for the PS report; None when the DB is not reachable (dev laptop)."""
+    try:
+        with db.engine().connect() as conn:
+            r = conn.execute(
+                text(
+                    "SELECT (SELECT count(*) FROM observations), (SELECT count(*) FROM composites), "
+                    "(SELECT count(*) FROM composites WHERE text_vec IS NOT NULL), "
+                    "(SELECT count(*) FROM composites WHERE eo_vec IS NOT NULL), (SELECT count(*) FROM change_events), "
+                    "pg_database_size(current_database())"
+                )
+            ).one()
+    except Exception:  # noqa: BLE001 - stats must answer without a database
+        return None
+    return {
+        "observations": r[0],
+        "composites": r[1],
+        "text_vec": r[2],
+        "eo_vec": r[3],
+        "change_events": r[4],
+        "postgis_gb": round(r[5] / 1e9, 2),
+    }
+
+
 @app.get("/stats")
 def stats() -> dict:
     """Archive size and footprint. Latencies are not measured yet (M2+)."""
@@ -86,6 +110,7 @@ def stats() -> dict:
                 shutil.disk_usage(paths.data if paths.data.exists() else paths.root).free / 1e9, 1
             ),
         },
+        "index": _index_stats(),
         "latency_ms": LATENCY_MS or None,
         "auth": "enabled"
         if __import__("governance.rbac", fromlist=["load"]).load() is not None

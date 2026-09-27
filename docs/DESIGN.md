@@ -120,7 +120,8 @@ These are defined in the `Makefile` (create them in M0 if missing; keep this tab
 | `make db-migrate` | Apply schema migrations |
 | `make stage` | `python scripts/stage_data.py all` (online; resumable) |
 | `make ingest AOI=<name>` | Ingest all staged scenes for an AOI |
-| `make ingest-scene PATH=<file>` | Incremental ingest of one scene |
+| `make ingest-scene SCENE=<file> AOI=<a>` | Incremental ingest of one scene (`SCENE`, since `PATH` would clobber the shell PATH); same as `POST /ingest` |
+| `make build-index AOI=<a>` | Full index build: `ingest` → `change` → `embed-eo` → `sar` (empty AOI = all) |
 | `make reconcile` | Rebuild/repair Qdrant from PostGIS |
 | `make audit-verify` | Recompute the audit hash chain |
 | `make bench-clip` | M1 go/no-go CLIP benchmark (EuroSAT + own tiles) |

@@ -8,7 +8,7 @@ OFFLINE := $(COMPOSE) -f docker/compose.offline.yaml
 -include docker/.env
 HOST_ENV := DATABASE_URL=postgresql://$(or $(POSTGRES_USER),sih):$(POSTGRES_PASSWORD)@127.0.0.1:5432/$(or $(POSTGRES_DB),sih)             QDRANT_URL=http://127.0.0.1:6333
 
-.PHONY: up build change stage-local down up-offline offline-check test lint db-migrate stage ingest ingest-scene reconcile \
+.PHONY: up build change stage-local down up-offline offline-check test lint db-migrate stage ingest ingest-scene reconcile embed-eo sar build-index \
         audit-verify bench-clip eval report verify-weights stats
 
 up:                    ## start (no rebuild: exporting the CUDA image takes ~10 min even when cached)
@@ -57,8 +57,17 @@ stage-local:           ## make stage-local FILES="<files or folders>" AOI=<name>
 change:                ## make change AOI=<name>   (M3: indices -> harmonic breaks -> events)
 	@$(HOST_ENV) $(RUN) python -m worker.change $(AOI)
 
-ingest-scene:          ## make ingest-scene PATH=<file>   (M9)
-	@echo "not implemented yet (M9)"; exit 1
+ingest-scene:          ## make ingest-scene SCENE=<staged folder|GeoTIFF> AOI=<name>   (M9; SCENE, since PATH would clobber $$PATH)
+	@$(HOST_ENV) $(RUN) python -m worker.jobs run --path $(SCENE) --aoi $(AOI)
+
+embed-eo:              ## make embed-eo AOI=<name>   (M7: Prithvi eo_vec per seasonal composite, GPU if present)
+	@$(HOST_ENV) $(RUN) python -m worker.embed_eo $(AOI)
+
+sar:                   ## make sar AOI=<name>   (M9: Sentinel-1 log-ratio evidence on stored events)
+	@$(HOST_ENV) $(RUN) python -m worker.sar_evidence $(AOI)
+
+build-index:           ## full index build for AOI (empty = all): ingest -> change -> eo_vec -> S1 evidence
+	$(MAKE) ingest AOI=$(AOI) && $(MAKE) change AOI=$(AOI) && $(MAKE) embed-eo AOI=$(AOI) && $(MAKE) sar AOI=$(AOI)
 
 reconcile:             ## rebuild Qdrant from PostGIS (M2)
 	@$(HOST_ENV) $(RUN) python -m index.reconcile
@@ -69,11 +78,11 @@ audit-verify:          ## recompute the audit hash chain (GET /audit/verify land
 bench-clip:            ## M1 go/no-go part 1: zero-shot EuroSAT per candidate -> eval/reports/
 	HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 $(RUN) python eval/bench_clip.py
 
-eval:                  ## (M10)
-	@echo "not implemented yet (M10)"; exit 1
+eval:                  ## M10: score the running API (QUERIES=file.json CASES=file.geojson) -> eval/reports/
+	$(RUN) python eval/run.py $(if $(QUERIES),--queries $(QUERIES)) $(if $(CASES),--cases $(CASES))
 
-report:                ## (M10)
-	@echo "not implemented yet (M10)"; exit 1
+report:                ## M10: PS evaluation report (stats, build time, storage, latency, hardware, provenance, eval)
+	$(RUN) python eval/report.py
 
 verify-weights:        ## every model file vs manifests/models.yaml (governance/model_registry.py)
 	$(RUN) python -c "import json, sys; from governance.model_registry import verify_all; r = verify_all(); print(json.dumps(r, indent=1)); sys.exit(any(v != 'ok' for v in r.values()))"
