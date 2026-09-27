@@ -21,7 +21,7 @@ from configs.settings import aois, paths
 from features import composites
 from index import db
 from ingest import local, scene
-from worker import change, ingest, landsat_evidence, sar_evidence
+from worker import calibrate_events, change, ingest, landsat_evidence, sar_evidence
 
 log = logging.getLogger("worker.jobs")
 POLL_S = 3
@@ -74,6 +74,8 @@ def ingest_one(path: str, aoi: str, progress=lambda t: None) -> dict:
     timings["s1_s"] = round(time.perf_counter() - t0, 1)
     ls = landsat_evidence.run(aoi)
     timings["landsat_s"] = round(time.perf_counter() - t0, 1)
+    cal = calibrate_events.run(aoi)  # needs the S1 / Landsat evidence as features (M5)
+    timings["calibrate_s"] = round(time.perf_counter() - t0, 1)
     return {
         "folder": str(folder.relative_to(paths.root)),
         "scene": status,
@@ -83,6 +85,7 @@ def ingest_one(path: str, aoi: str, progress=lambda t: None) -> dict:
         "change": ch,
         "s1": s1,
         "landsat": ls,
+        "calibration": cal,
         "timings": timings,
     }
 

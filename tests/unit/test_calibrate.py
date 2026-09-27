@@ -50,3 +50,16 @@ def test_weak_label_rules():
     assert label("water", z | {"water": -0.1, "flooded_vegetation": -0.15}, 0.25, 0) == "tp"
     assert label("road", z, 0.02, 250) == "tp"  # stable land cover but a new road
     assert label("other", z | {"built": 0.05}, 0.22, 0) == "tp"
+
+
+def test_event_model_features_roundtrip_and_monotone():
+    from change.calibrate import EventModel, event_features, fit_isotonic
+
+    ev = {"landsat": {"agrees": True}, "s1": {"agrees": False}}
+    assert event_features(0.7, "clearance", ev) == [0.7, 0.0, 1.0, 0.0, 0.0, 1.0]
+    assert event_features(0.7, "other", {})[1:] == [1.0, 0.0, 0.0, 0.0, 0.0]
+    iso = fit_isotonic(np.array([0.1, 0.5, 0.9]), np.array([0.0, 1.0, 1.0]), "t")
+    m = EventModel("t", (3.0, -1.0, 1.0, 0.0, 1.0, 0.0), -1.0, iso, 0.6)
+    assert EventModel.from_dict(m.to_dict()) == m
+    lo, hi = m.predict(np.array([[0.2, 0, 0, 0, 0, 0], [0.9, 0, 1, 0, 1, 0]]))
+    assert 0.0 <= lo <= hi <= 1.0  # stronger evidence never lowers the probability
