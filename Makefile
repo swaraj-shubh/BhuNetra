@@ -13,6 +13,10 @@ HOST_ENV := DATABASE_URL=postgresql://$(or $(POSTGRES_USER),sih):$(POSTGRES_PASS
 
 up:                    ## start (no rebuild: exporting the CUDA image takes ~10 min even when cached)
 	$(COMPOSE) up -d --wait
+	$(MAKE) warm
+
+warm:                  ## re-read the vector index into the page cache (builds evict it: first look-alike query 7-9 s cold, 0.15 s warm)
+	$(COMPOSE) exec -T qdrant sh -c 'find /qdrant/storage -type f -exec cat {} + > /dev/null'
 
 build:                 ## rebuild the api image after code/web changes (ONLINE)
 	$(COMPOSE) build
@@ -22,12 +26,14 @@ down:
 
 up-offline:            ## the proof run: app network has no external route
 	$(OFFLINE) up -d --wait
+	$(OFFLINE) exec -T qdrant sh -c 'find /qdrant/storage -type f -exec cat {} + > /dev/null'
 	$(MAKE) offline-check
 
 offline-check:         ## /stats answers from inside; the internet does not
 	$(OFFLINE) exec -T api python -c "import urllib.request as u; print(u.urlopen('http://localhost:8000/stats').status)"
 	$(OFFLINE) exec -T api python -c "import urllib.request as u; u.urlopen('https://huggingface.co', timeout=5)" \
 	  && { echo "NETWORK REACHABLE - not offline"; exit 1; } || echo "offline OK: no external route"
+	python3 -c "import urllib.request as u; print('web UI via gate:', u.urlopen('http://127.0.0.1:8000/stats', timeout=10).status)"
 
 test:
 	$(RUN) pytest -q

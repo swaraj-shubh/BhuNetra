@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import rasterio
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.staticfiles import StaticFiles
 from PIL import Image
 from pydantic import BaseModel, Field
@@ -39,7 +39,25 @@ async def lifespan(_: FastAPI):
         pass
     except Exception as e:  # noqa: BLE001 - e.g. WeightMismatch: keep serving /stats, which reports it
         WEIGHT_ERROR.append(str(e))
+    import threading
+
+    threading.Thread(
+        target=_warm_cluster, daemon=True
+    ).start()  # numba JIT: first "Groups" click took 12-30 s
     yield
+
+
+def _warm_cluster() -> None:
+    import numpy as np
+
+    from query import cluster
+
+    try:
+        cluster.cluster(np.random.default_rng(0).normal(size=(60, 32)).astype(np.float32), 5, 4)
+    except Exception as e:  # noqa: BLE001 - warm-up only; a real request reports its own error
+        import logging
+
+        logging.getLogger("api").warning("cluster warm-up failed: %s", e)
 
 
 app = FastAPI(title="SIH26227 EO archive", lifespan=lifespan)
@@ -93,6 +111,7 @@ def stats() -> dict:
         scenes = {s: len(list((paths.raw / s / name).glob("*/scene.json"))) for s in sources["sources"]}
         per_aoi[name] = {
             "area_km2": round(_area_km2(a.bbox), 1),
+            "bbox": list(a.bbox),
             "tiles": sum(1 for _ in tiling.tiles(name, tiling.aoi_bounds_m(a.bbox, epsg), epsg)),
             "scenes": {s: n for s, n in scenes.items() if n},
         }
@@ -327,6 +346,11 @@ def change(
     t2: str | None = None,
     type: str | None = None,  # contract parameter name (DESIGN.md §12) shadows the builtin here only
     min_conf: float = T.events.OPERATING_CONF,
+    unreviewed: bool = False,  # workbench queue: only events no analyst has decided yet
+    all_types: bool = False,  # include events.HIDDEN_TYPES (hidden by default: precision first, §2.11)
+    limit: int | None = Query(
+        default=None, ge=1, le=100000
+    ),  # workbench page size; evaluation omits it (all events)
     user: dict = VIEWER,
 ) -> dict:
     """Stored events only: confidence is fixed at ingest (§2.2). Below OPERATING_CONF stays hidden unless asked."""
@@ -343,17 +367,28 @@ def change(
         if val is not None:
             where.append(cond)
             params[key] = val
+    if unreviewed:
+        where.append("e.analyst_status = 'unreviewed'")
+    if type is None and not all_types and T.events.HIDDEN_TYPES:
+        where.append("NOT (e.change_type::text = ANY(:hidden))")
+        params["hidden"] = list(T.events.HIDDEN_TYPES)
+    cond_sql = " AND ".join(where)
     with db.engine().connect() as conn:
+        total = conn.execute(
+            text(f"SELECT count(*) FROM change_events e JOIN tiles t USING (tile_id) WHERE {cond_sql}"),
+            params,
+        ).scalar_one()
         rows = conn.execute(
             text(
-                f"SELECT {EVENT_COLS} FROM change_events e JOIN tiles t USING (tile_id) WHERE {' AND '.join(where)} "
-                "ORDER BY e.confidence DESC, e.earliest_supported_date"
+                f"SELECT {EVENT_COLS} FROM change_events e JOIN tiles t USING (tile_id) WHERE {cond_sql} "
+                "ORDER BY e.confidence DESC, e.earliest_supported_date, e.event_id"
+                + (" LIMIT :lim" if limit else "")
             ),
-            params,
+            params | ({"lim": limit} if limit else {}),
         ).mappings()
         out = [_event(r) for r in rows]
     LATENCY_MS["change"] = round((time.perf_counter() - t0) * 1000, 1)
-    return {"events": out}
+    return {"events": out, "total": total}
 
 
 @app.get("/events/{event_id}")

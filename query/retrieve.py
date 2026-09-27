@@ -73,6 +73,9 @@ def events(conn, p: Parsed, aoi: str | None, date_range, sensor: str | None = No
     if p.change_types:
         where.append("e.change_type::text = ANY(:types)")
         params["types"] = list(p.change_types)
+    elif T.events.HIDDEN_TYPES:  # "any change": not the types that never reach TARGET_PRECISION
+        where.append("NOT (e.change_type::text = ANY(:hidden))")
+        params["hidden"] = list(T.events.HIDDEN_TYPES)
     if aoi:
         where.append("t.aoi = :aoi")
         params["aoi"] = aoi

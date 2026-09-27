@@ -64,6 +64,7 @@ class Events(_Strict):
     MIN_POST_DAYS: (
         int  # break -> end of series span for full confidence (shorter = end-of-series, provisional)
     )
+    HIDDEN_TYPES: list[str]  # stored, but not reported unless asked (type never reaches TARGET_PRECISION)
 
 
 class Retrieval(_Strict):

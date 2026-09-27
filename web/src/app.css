@@ -81,3 +81,17 @@ details summary { cursor: pointer; color: #9aa3ad; margin-top: 8px; }
 .kpis div { background: #171b20; border: 1px solid #2a2f36; border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; }
 .kpis b { font-size: 18px; } .kpis span { font-size: 11px; color: #9aa3ad; }
 .system p, .system td { font-size: 12px; }
+.drawer { position: absolute; top: 12px; right: 12px; bottom: 12px; width: 440px; max-width: calc(100% - 24px); overflow-y: auto; box-sizing: border-box; background: rgba(17, 20, 24, .97); border: 1px solid #2a2f36; border-radius: 10px; padding: 12px 14px; font-size: 12px; z-index: 3; box-shadow: 0 6px 24px rgba(0,0,0,.5); }
+.drawer p { margin: 4px 0; }
+.drawer img.big { image-rendering: pixelated; width: 160px; }
+.drawer input { margin-top: 10px; }
+.close { position: sticky; top: 0; float: right; background: #232932; border: 1px solid #3a414a; color: #e6e6e6; width: 28px; height: 28px; padding: 0; font-size: 18px; line-height: 1; border-radius: 14px; z-index: 1; }
+.legend { left: 12px; right: auto; }
+.site-marker { background: #f5b400; color: #111; border: 2px solid #111; border-radius: 12px; min-width: 22px; height: 22px; padding: 0 5px; font-weight: 700; font-size: 11px; cursor: pointer; }
+.site-marker.on { background: #fff; transform: scale(1.25); }
+.aoi-label { color: #9aa3ad; font-size: 11px; background: rgba(17,20,24,.8); padding: 1px 6px; border-radius: 4px; white-space: nowrap; pointer-events: none; }
+.apikey { width: 100%; box-sizing: border-box; }
+.mono { overflow-wrap: anywhere; }
+aside { min-width: 0; }
+.areas { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: 12px; margin-top: 8px; color: #9aa3ad; }
+button.chip.on { border-color: #f5b400; color: #f5b400; }

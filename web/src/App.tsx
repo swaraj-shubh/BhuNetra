@@ -53,7 +53,7 @@ function Bar({ v }: { v: number }) {
 
 /** Plain-language summary of why a site is in the list. */
 function headline(s: Site) {
-  if (!s.events.length) return <span className="muted">No stored change here: matched on how the place looks</span>;
+  if (!s.events.length) return <span className="muted">Matched on appearance · no change detected here</span>;
   const best = [...s.events].sort((a, b) => b.confidence - a.confidence)[0];
   const since = s.events.map((e) => e.earliest_supported_date).sort()[0];
   return (
@@ -69,6 +69,8 @@ export default function App() {
   const mapDiv = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const chipIds = useRef<string[]>([]);
+  const markers = useRef<maplibregl.Marker[]>([]);
+  const [drawerEl, setDrawerEl] = useState<HTMLDivElement | null>(null);
   const [query, setQuery] = useState("");
   const [aoi, setAoi] = useState("");
   const [sites, setSites] = useState<Site[]>([]);
@@ -88,6 +90,7 @@ export default function App() {
   const [fb, setFb] = useState<Record<string, string>>({});
   const [groups, setGroups] = useState<{ seed: string; list: Group[]; noise: number } | null>(null);
   const [showEventLayer, setShowEventLayer] = useState(false);
+  const [focusArea, setFocusArea] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState(() => { try { return localStorage.getItem("apikey") ?? ""; } catch { return ""; } });
 
   useEffect(() => {
@@ -98,6 +101,8 @@ export default function App() {
       zoom: 9,
     });
     m.on("load", () => {
+      m.addSource("aois", { type: "geojson", data: EMPTY });
+      m.addLayer({ id: "aois-line", type: "line", source: "aois", paint: { "line-color": "#6b7684", "line-width": 1.5, "line-dasharray": [3, 2] } });
       m.addSource("sites", { type: "geojson", data: EMPTY });
       m.addSource("event", { type: "geojson", data: EMPTY });
       m.addSource("clusters", { type: "geojson", data: EMPTY });
@@ -111,6 +116,27 @@ export default function App() {
       m.addLayer({ id: "sites-sel", type: "line", source: "sites", filter: ["==", ["get", "tile_id"], ""], paint: { "line-color": "#ffffff", "line-width": 4 } });
       setReady(true);
       m.on("click", "sites-line", (e: MapLayerMouseEvent) => setSelected(String(e.features?.[0]?.properties?.tile_id ?? "")));
+      // Archive extent from the start, so an analyst knows where imagery exists (labels as DOM markers: no glyphs offline)
+      fetch("/stats").then((r) => r.json()).then((st: { aois: Record<string, { bbox: number[]; area_km2: number }> }) => {
+        const entries = Object.entries(st.aois).filter(([, a]) => a.bbox);
+        (m.getSource("aois") as GeoJSONSource).setData({
+          type: "FeatureCollection",
+          features: entries.map(([name, a]) => {
+            const [x0, y0, x1, y1] = a.bbox;
+            return { type: "Feature", properties: { name }, geometry: { type: "Polygon", coordinates: [[[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0]]] } };
+          }),
+        });
+        entries.forEach(([name, a]) => {
+          const el = document.createElement("div");
+          el.className = "aoi-label";
+          el.textContent = `${name} · ${Math.round(a.area_km2)} km²`;
+          new maplibregl.Marker({ element: el, anchor: "bottom-left" }).setLngLat([a.bbox[0], a.bbox[3]]).addTo(m);
+        });
+        if (entries.length) {
+          const xs = entries.flatMap(([, a]) => [a.bbox[0], a.bbox[2]]), ys = entries.flatMap(([, a]) => [a.bbox[1], a.bbox[3]]);
+          m.fitBounds([Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)], { padding: 80, duration: 0 });
+        }
+      }).catch(() => undefined);
     });
     map.current = m;
     return () => m.remove();
@@ -129,26 +155,46 @@ export default function App() {
       const id = `chip-${s.rank}`;
       const ring = s.geometry.coordinates[0]; // lower-left, lower-right, upper-right, upper-left, closed
       m.addSource(id, { type: "image", url: s.chip_url, coordinates: [ring[3], ring[2], ring[1], ring[0]] as [number, number][] as never });
-      m.addLayer({ id, type: "raster", source: id, paint: { "raster-opacity": 0.95 } }, "sites-line");
+      m.addLayer({ id, type: "raster", source: id, paint: { "raster-opacity": 0.95 } }, "clusters-fill"); // under groups + change area
       chipIds.current.push(id);
+    });
+    markers.current.forEach((mk) => mk.remove());
+    markers.current = sites.map((s) => {
+      const el = document.createElement("button");
+      el.className = "site-marker";
+      el.textContent = String(s.rank);
+      el.title = `Result ${s.rank}`;
+      el.onclick = (e) => { e.stopPropagation(); setSelected(s.tile_id); };
+      const ring = s.geometry.coordinates[0];
+      const c: [number, number] = [(ring[0][0] + ring[2][0]) / 2, ring[2][1]];
+      return new maplibregl.Marker({ element: el, anchor: "bottom" }).setLngLat(c).addTo(m);
     });
     (m.getSource("sites") as GeoJSONSource).setData({
       type: "FeatureCollection",
       features: sites.map((s) => ({ type: "Feature", geometry: s.geometry, properties: { tile_id: s.tile_id, rank: s.rank } })),
     });
-    const all = [...sites.map((s) => s.geometry), ...(mode?.kind === "similar" ? [mode.seed.geometry] : [])];
-    if (all.length) {
-      const cs = all.flatMap((g) => g.coordinates[0]);
-      m.fitBounds([Math.min(...cs.map((c) => c[0])), Math.min(...cs.map((c) => c[1])), Math.max(...cs.map((c) => c[0])), Math.max(...cs.map((c) => c[1]))] as LngLatBoundsLike, { padding: 60, maxZoom: 13 });
-    }
-  }, [sites, ready, mode]);
+    if (sites.length) zoomToArea(focusArea ?? sites[0].aoi);
+  }, [sites, ready, mode]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** Areas are hundreds of km apart: frame one area's results at a time (the banner offers the others). */
+  function zoomToArea(area: string) {
+    const m = map.current;
+    if (!m) return;
+    setFocusArea(area);
+    const geoms = [...sites.filter((s) => s.aoi === area).map((s) => s.geometry), ...(mode?.kind === "similar" && mode.seed.aoi === area ? [mode.seed.geometry] : [])];
+    if (!geoms.length) return;
+    const cs = geoms.flatMap((g) => g.coordinates[0]);
+    m.fitBounds([Math.min(...cs.map((c) => c[0])), Math.min(...cs.map((c) => c[1])), Math.max(...cs.map((c) => c[0])), Math.max(...cs.map((c) => c[1]))] as LngLatBoundsLike, { padding: 80, maxZoom: 13 });
+  }
+  const areaCounts = Object.entries(sites.reduce<Record<string, number>>((a, s) => ({ ...a, [s.aoi]: (a[s.aoi] ?? 0) + 1 }), {}));
 
   useEffect(() => {
     const m = map.current;
     if (!m || !m.getLayer("sites-sel")) return;
     m.setFilter("sites-sel", ["==", ["get", "tile_id"], selected ?? ""]);
     const s = sites.find((x) => x.tile_id === selected);
-    if (s) m.flyTo({ center: s.geometry.coordinates[0][0] as [number, number], zoom: 13 });
+    if (s && !s.events.length) m.flyTo({ center: s.geometry.coordinates[0][0] as [number, number], zoom: 14 }); // change sites zoom to the changed area instead
+    markers.current.forEach((mk) => mk.getElement().classList.toggle("on", mk.getElement().textContent === String(s?.rank)));
   }, [selected, sites]);
 
   function clearClusters() {
@@ -167,6 +213,7 @@ export default function App() {
       if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
       const body = await r.json();
       const md: Mode = { kind: "text", query: q };
+      setFocusArea(null);
       setSites(body.sites);
       setTextResults({ sites: body.sites, mode: md });
       setMode(md);
@@ -196,6 +243,7 @@ export default function App() {
     const r = await fetch("/search/image", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tile_id: seed.tile_id, k: 20 }) });
     if (!r.ok) return setStatus(`Error ${r.status}: ${await r.text()}`);
     const body = await r.json();
+    setFocusArea(null);
     setSites(body.sites);
     setMode({ kind: "similar", seed, season: body.seed.season });
     setSelected(null);
@@ -229,7 +277,7 @@ export default function App() {
   async function exportQuery() {
     if (!queryId) return;
     setStatus("Preparing signed package…");
-    const r = await fetch("/export", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ query_id: queryId }) });
+    const r = await fetch("/export", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ query_id: queryId, format: "gpkg" }) });
     if (!r.ok) return setStatus(`Export error ${r.status}: ${await r.text()}`);
     const url = URL.createObjectURL(await r.blob());
     const a = document.createElement("a");
@@ -282,7 +330,7 @@ export default function App() {
           <button role="tab" aria-selected={tab === "system"} className={tab === "system" ? "on" : ""} onClick={() => setTab("system")}>System</button>
         </div>
 
-        {tab === "system" ? <System /> : tab === "review" ? <Review onShow={showEvent} /> : <>
+        {tab === "system" ? <System /> : tab === "review" ? <Review onShow={showEvent} drawer={drawerEl} /> : <>
           <form onSubmit={(e) => { e.preventDefault(); runSearch(query); }}>
             <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Describe what you are looking for…" autoFocus />
             <select value={aoi} onChange={(e) => setAoi(e.target.value)} aria-label="Area of interest">
@@ -311,6 +359,7 @@ export default function App() {
               <div className="banner-title">Results for “{mode.query}”</div>
               <div className="pills">{pills.map((p) => <span key={p} className="pill">{p}</span>)}</div>
               {warnings.map((w) => <p key={w} className="warn">{WARNING_TEXT[w] ?? w}</p>)}
+              {areaCounts.length > 1 && <div className="areas">Results in: {areaCounts.map(([a, k]) => <button key={a} className={`chip ${a === focusArea ? "on" : ""}`} onClick={() => zoomToArea(a)}>{a} ({k})</button>)}</div>}
               {queryId && sites.length > 0 && <button className="ghost" onClick={exportQuery}>Download signed results</button>}
             </div>
           )}
@@ -321,6 +370,7 @@ export default function App() {
                 {mode.seed.chip_url && <img src={`/chips/${mode.seed.tile_id}/${mode.season}.png`} alt="" width={56} height={56} />}
                 <div className="muted">Original place: {mode.seed.aoi} · compared using its {seasonLabel(mode.season)} image. Ranked by visual similarity (Prithvi model).</div>
               </div>
+              {areaCounts.length > 1 && <div className="areas">Results in: {areaCounts.map(([a, k]) => <button key={a} className={`chip ${a === focusArea ? "on" : ""}`} onClick={() => zoomToArea(a)}>{a} ({k})</button>)}</div>}
               {textResults && <button className="ghost" onClick={backToResults}>← Back to search results</button>}
             </div>
           )}
@@ -341,8 +391,8 @@ export default function App() {
                   </div>
                   <div className="line muted">{s.aoi} · picture: {seasonLabel(s.season)}{s.events.length ? " (current state)" : ""}{s.q_mean !== null && s.q_mean < 0.8 ? " · partly cloudy" : ""}</div>
                   <div className="actions" onClick={(e) => e.stopPropagation()}>
-                    <button className="ghost small" title="Find other places that look like this (image search)" onClick={() => similar(s)}>Find look-alikes</button>
-                    <button className="ghost small" title="Colour groups of look-alike places on the map" onClick={() => clusters(s)}>Group look-alikes</button>
+                    <button className="ghost small" title="Find other places that look like this (image search)" onClick={() => similar(s)}>Look-alikes</button>
+                    <button className="ghost small" title="Colour groups of look-alike places on the map" onClick={() => clusters(s)}>Groups</button>
                     {queryId && mode?.kind === "text" && <>
                       <button className={`ghost small ${fb[s.tile_id] === "confirm" ? "on" : ""}`} title="Relevant: pull similar results up" onClick={() => siteFeedback(s.tile_id, "confirm")}>✓ Relevant</button>
                       <button className="ghost small" title="Not relevant: remove and re-rank" onClick={() => siteFeedback(s.tile_id, "reject")}>✗ Not relevant</button>
@@ -353,33 +403,6 @@ export default function App() {
             ))}
           </ol>
 
-          {sel && (
-            <section className="detail">
-              <h2>Place #{sel.rank}: details</h2>
-              {sel.events.length > 0
-                ? (selEvent ? <EvidencePanel ev={selEvent} /> : <p className="muted">Loading evidence…</p>)
-                : sel.chip_url && <><img src={`${sel.chip_url}?size=160`} alt="" className="big" /><p className="muted">{seasonLabel(sel.season)} image; no change stored at this place.</p></>}
-              <h3>Why it is ranked here</h3>
-              <table className="why"><tbody>
-                <tr><td>Looks like your description</td><td><Bar v={sel.parts.sim_norm ?? 0} /></td></tr>
-                <tr><td>Confidence of a detected change</td><td><Bar v={sel.parts.event_conf ?? 0} /></td></tr>
-                <tr><td>Image quality (cloud-free)</td><td><Bar v={sel.parts.q ?? 0} /></td></tr>
-                <tr><td>Fits the place you asked for</td><td><Bar v={sel.parts.spatial_fit ?? 0} /></td></tr>
-              </tbody></table>
-              {sel.events.length > 1 && <h3>All changes at this place</h3>}
-              {sel.events.length > 1 && sel.events.map((e) => (
-                <p key={e.event_id} className="evline"><i className="dot" style={{ background: TYPE_COLOUR[e.change_type] }} />{typeLabel(e.change_type)} · first seen {e.earliest_supported_date} · <ConfTag c={e.confidence} /> <span className="muted">({e.event_id})</span></p>
-              ))}
-              <details>
-                <summary>Search provenance (images and models behind this result)</summary>
-                <p>Satellite scenes used: {sel.provenance.scene_ids.length}</p>
-                <p className="mono">{sel.provenance.scene_ids.join(", ")}</p>
-                <p>Models: {Object.entries(sel.provenance.model_versions).map(([k, v]) => `${k} = ${v}`).join(", ") || "—"}</p>
-                <p>Change-detection version: {sel.provenance.cascade_version?.join(", ") ?? "—"}</p>
-                <p>Grid cells: {sel.member_tiles.join(", ")}</p>
-              </details>
-            </section>
-          )}
 
           <details className="help">
             <summary>How to read this screen</summary>
@@ -388,7 +411,7 @@ export default function App() {
               <li>Each result is a 640 m square of ground. The picture is a cloud-free satellite image of it for one season.</li>
               <li><b>Match</b> = how well it looks like your description. A coloured dot means a change was detected there, with how likely it is to be real.</li>
               <li><b>✓ / ✗</b> teaches the search what you mean; the list re-ranks immediately.</li>
-              <li><b>Find look-alikes</b> shows other places that look like the chosen one. <b>Group look-alikes</b> colours groups of similar places on the map.</li>
+              <li><b>Look-alikes</b> shows other places that look like the chosen one. <b>Groups</b> colours groups of similar places on the map.</li>
               <li>At 10 m per pixel we see construction sites, clearing, mining, water and major roads, not individual vehicles or small buildings.</li>
             </ul>
           </details>
@@ -398,6 +421,36 @@ export default function App() {
       </aside>
       <main>
         <div ref={mapDiv} className="map" />
+        <div ref={setDrawerEl} />
+            {tab === "search" && sel && (
+              <section className="drawer">
+                <button className="close" title="Close" onClick={() => setSelected(null)}>×</button>
+                <h2>Place #{sel.rank}: details</h2>
+                {sel.events.length > 0
+                  ? (selEvent ? <EvidencePanel ev={selEvent} /> : <p className="muted">Loading evidence…</p>)
+                  : sel.chip_url && <><img src={`${sel.chip_url}?size=160`} alt="" className="big" /><p className="muted">{seasonLabel(sel.season)} image; no change stored at this place.</p></>}
+                <h3>Why it is ranked here</h3>
+                <table className="why"><tbody>
+                  <tr><td>Looks like your description</td><td><Bar v={sel.parts.sim_norm ?? 0} /></td></tr>
+                  <tr><td>Confidence of a detected change</td><td><Bar v={sel.parts.event_conf ?? 0} /></td></tr>
+                  <tr><td>Image quality (cloud-free)</td><td><Bar v={sel.parts.q ?? 0} /></td></tr>
+                  <tr><td>Fits the place you asked for</td><td><Bar v={sel.parts.spatial_fit ?? 0} /></td></tr>
+                </tbody></table>
+                {sel.events.length > 1 && <h3>All changes at this place</h3>}
+                {sel.events.length > 1 && sel.events.map((e) => (
+                  <p key={e.event_id} className="evline"><i className="dot" style={{ background: TYPE_COLOUR[e.change_type] }} />{typeLabel(e.change_type)} · first seen {e.earliest_supported_date} · <ConfTag c={e.confidence} /> <span className="muted">({e.event_id})</span></p>
+                ))}
+                <details>
+                  <summary>Search provenance (images and models behind this result)</summary>
+                  <p>Satellite scenes used: {sel.provenance.scene_ids.length}</p>
+                  <p className="mono">{sel.provenance.scene_ids.join(", ")}</p>
+                  <p>Models: {Object.entries(sel.provenance.model_versions).map(([k, v]) => `${k} = ${v}`).join(", ") || "—"}</p>
+                  <p>Change-detection version: {sel.provenance.cascade_version?.join(", ") ?? "—"}</p>
+                  <p>Grid cells: {sel.member_tiles.join(", ")}</p>
+                </details>
+              </section>
+            )}
+
         <div className="legend">
           <b>Map key</b>
           {tab === "search" && <>

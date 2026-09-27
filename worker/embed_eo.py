@@ -69,7 +69,7 @@ def run(aoi: str, full_sync: bool = True) -> dict:
             vecs = embed_prithvi.embed_composite(
                 paths.composites / aoi / side["file"], offs, tile_len, mid, lat, lon
             )
-        with db.engine().begin() as conn:
+        with timed("eo_vec_store", aoi=aoi, season=season), db.engine().begin() as conn:
             # one statement per season (pg8000 executemany = one round trip per row: ~80 s/season)
             conn.execute(
                 text(
@@ -91,7 +91,8 @@ def run(aoi: str, full_sync: bool = True) -> dict:
             audit.append(
                 conn, ACTOR, "embed.eo_vec", {"aoi": aoi, "season": season, "tiles": len(ids), "model": ver}
             )
-        qdrant.set_vectors([(f"{t}|{season}", {"eo_vec": v}) for t, v in zip(ids, vecs, strict=True)])
+        with timed("eo_vec_store", aoi=aoi, season=season, target="qdrant"):
+            qdrant.set_vectors([(f"{t}|{season}", {"eo_vec": v}) for t, v in zip(ids, vecs, strict=True)])
         counts["built"] += 1
         log.info(json.dumps({"aoi": aoi, "season": season, "tiles": len(ids)}))
     counts["qdrant_synced"] = sync(aoi) if full_sync else 0

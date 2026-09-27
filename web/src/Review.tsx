@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 // M6 review queue: stored change events (confidence fixed at ingest, DESIGN.md §2.2), confirm/reject + reason.
 export type EventRow = {
@@ -38,9 +39,6 @@ export const TYPE_COLOUR: Record<string, string> = {
 const TYPE_TEXT: Record<string, string> = {
   construction: "Construction", clearance: "Land clearing / mining", water: "Water change", road: "Road", other: "Unclassified change",
 };
-const DIRECTION_TEXT: Record<string, string> = {
-  appearance: "appeared", disappearance: "disappeared", expansion: "expanded", contraction: "shrank",
-};
 export const SENSOR_TEXT: Record<string, string> = {
   sentinel2: "Sentinel-2 (optical, 10 m)", sentinel1: "Sentinel-1 (radar)", landsat: "Landsat 8/9 (optical, 30 m)",
 };
@@ -54,6 +52,15 @@ const ACTION_TEXT: Record<string, string> = {
   export: "Exported in a signed package",
 };
 export const typeLabel = (t: string) => TYPE_TEXT[t] ?? t;
+const TITLE: Record<string, string> = {
+  "construction/appearance": "New construction", "construction/expansion": "Built-up area expanded",
+  "clearance/disappearance": "Land cleared (vegetation removed)", "clearance/appearance": "Bare ground or mining appeared",
+  "clearance/expansion": "Cleared area expanded", "water/appearance": "Water appeared", "water/expansion": "Water extent grew",
+  "water/disappearance": "Water disappeared", "water/contraction": "Water extent shrank", "road/appearance": "New road",
+  "road/expansion": "Road widened or extended",
+};
+/** One plain phrase for type + direction ("Land clearing disappeared" read as nonsense). */
+export const eventTitle = (t: string, d: string | null) => TITLE[`${t}/${d}`] ?? (t === "other" ? "Unclassified change (low reliability)" : typeLabel(t));
 
 /** Confidence in words. The calibrated number is not shown as a probability: on our blind held-out set, events
  * above the operating threshold were real 61% of the time, so "95% likely real" would overstate it. */
@@ -136,7 +143,7 @@ function ObsLine({ o, label, date }: { o: Obs; label: string; date: string | nul
 export function EvidencePanel({ ev }: { ev: FullEvent }) {
   return (
     <>
-      <h2><i className="dot" style={{ background: TYPE_COLOUR[ev.change_type] }} />{typeLabel(ev.change_type)}{ev.direction ? ` ${DIRECTION_TEXT[ev.direction] ?? ev.direction}` : ""}</h2>
+      <h2><i className="dot" style={{ background: TYPE_COLOUR[ev.change_type] }} />{eventTitle(ev.change_type, ev.direction)}</h2>
       <p className="big-line"><ConfTag c={ev.confidence} /> · first seen <b>{ev.earliest_supported_date}</b></p>
       <div className="pair">
         <ImageFig img={ev.images?.before ?? null} label="Before" />
@@ -181,7 +188,7 @@ export function EvidencePanel({ ev }: { ev: FullEvent }) {
   );
 }
 
-export default function Review({ onShow }: { onShow: (ev: EventRow | null) => void }) {
+export default function Review({ onShow, drawer }: { onShow: (ev: EventRow | null) => void; drawer: HTMLElement | null }) {
   const [aoi, setAoi] = useState("");
   const [type, setType] = useState("");
   const [t1, setT1] = useState("");
@@ -194,17 +201,16 @@ export default function Review({ onShow }: { onShow: (ev: EventRow | null) => vo
   const [msg, setMsg] = useState("");
 
   async function load() {
-    const q = new URLSearchParams();
-    if (showHidden) q.set("min_conf", "0"); // default: the API's operating threshold (low-confidence events stay hidden)
+    const q = new URLSearchParams({ unreviewed: "true", limit: "200" });
+    if (showHidden) { q.set("min_conf", "0"); q.set("all_types", "true"); } // default: operating threshold, reliable types only
     if (aoi) q.set("aoi", aoi);
     if (type) q.set("type", type);
     if (t1) q.set("t1", t1);
     if (t2) q.set("t2", t2);
     const r = await fetch(`/change?${q}`);
     const d = await r.json();
-    const open = (d.events as EventRow[]).filter((e) => e.analyst_status === "unreviewed");
-    setTotal(open.length);
-    setRows(open.slice(0, 200));
+    setTotal(d.total ?? d.events.length);
+    setRows(d.events as EventRow[]);
   }
   useEffect(() => { load(); }, [aoi, type, t1, t2, showHidden]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -249,11 +255,12 @@ export default function Review({ onShow }: { onShow: (ev: EventRow | null) => vo
         <label>Changed from <input type="date" value={t1} onChange={(e) => setT1(e.target.value)} /></label>
         <label>to <input type="date" value={t2} onChange={(e) => setT2(e.target.value)} /></label>
       </div>
-      <label className="check"><input type="checkbox" checked={showHidden} onChange={(e) => setShowHidden(e.target.checked)} /> Also show low-confidence changes (normally hidden)</label>
+      <label className="check"><input type="checkbox" checked={showHidden} onChange={(e) => setShowHidden(e.target.checked)} /> Also show hidden changes (low confidence, or unclassified)</label>
       <p className="status">{total} changes to review{total > rows.length ? ` (showing the top ${rows.length})` : ""}</p>
 
-      {sel && (
-        <section className="detail">
+      {sel && drawer && createPortal(
+        <section className="drawer">
+          <button className="close" title="Close" onClick={() => { setSel(null); onShow(null); }}>×</button>
           <EvidencePanel ev={sel} />
           <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason (optional), e.g. seasonal flooding, crop harvest" aria-label="Reason" />
           <div className="row">
@@ -261,14 +268,15 @@ export default function Review({ onShow }: { onShow: (ev: EventRow | null) => vo
             <button className="ghost" onClick={() => decide("reject")}>✗ False alarm</button>
           </div>
           <p className="status">{msg}</p>
-        </section>
+        </section>,
+        drawer,
       )}
 
       <ol className="results compact">
         {rows.map((e) => (
           <li key={e.event_id} className={sel?.event_id === e.event_id ? "sel" : ""} onClick={() => open(e)}>
             <div className="body">
-              <div className="line"><i className="dot" style={{ background: TYPE_COLOUR[e.change_type] }} /><b>{typeLabel(e.change_type)}</b> · {e.aoi}</div>
+              <div className="line"><i className="dot" style={{ background: TYPE_COLOUR[e.change_type] }} /><b>{eventTitle(e.change_type, e.direction)}</b> · {e.aoi}</div>
               <div className="line meta"><ConfTag c={e.confidence} /> · first seen {e.earliest_supported_date}</div>
             </div>
           </li>

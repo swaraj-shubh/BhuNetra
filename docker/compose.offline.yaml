@@ -1,5 +1,24 @@
 # Offline proof (DESIGN.md §2.8): the app network is internal - containers cannot reach the internet.
-# Published ports do not work on internal networks; check with: make offline-check
+# Published ports do not work on internal networks, so `gate` (api image, stdlib relay, docker/gate.py) joins `app`
+# and a normal `edge` network and forwards only the web port. Check with: make offline-check
 networks:
   app:
     internal: true
+  edge: {}
+
+services:
+  api:
+    ports: !reset []
+  db:
+    ports: !reset []
+  qdrant:
+    ports: !reset []
+  gate:
+    image: sih26227-api
+    command: ["python", "/gate.py"]
+    volumes:
+      - ./gate.py:/gate.py:ro
+    depends_on:
+      api: {condition: service_healthy}
+    ports: ["127.0.0.1:8000:8000"]
+    networks: [app, edge]
