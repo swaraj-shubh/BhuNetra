@@ -44,7 +44,11 @@ spatial context) → `make change` (indices → harmonic + persistent breaks →
 (Prithvi eo_vec, GPU) → `make sar` (Sentinel-1 evidence). Every step is safe to re-run (ingest skips scenes with a known sha256 and seasons already
 built; eo_vec skips seasons with the current model version); per-stage timings go to `manifests/build.json`.
 
-Measured on the reference box (3 AOIs, 1,253 km², 772 scenes): TODO(measure): clean timed build in progress.
+Measured on the reference box (g4dn.xlarge: 4 vCPU, 16 GB, T4; 3 AOIs, 1,253 km², 772 scenes), from an empty
+database, 2026-09-27: ingest 1 h 56 min · change 53 min · eo_vec 57 min · S1 evidence 9 min · **total 3 h 56 min**
+(Landsat evidence adds ~2 min). Upper bound: other jobs shared the box for most of the run. Output: 5,678 events and
+352,475 vectors of each kind, identical to the live system (reproducible). Storage: ARD 8.0 GB, composites 8.6 GB,
+PostGIS 4.2 GB, Qdrant 2.3 GB. Per-stage timings: `manifests/build_full_2026-09-27.json`.
 
 ## 3. Incremental ingestion (new acquisition, no rebuild)
 

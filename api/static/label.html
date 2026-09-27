@@ -116,7 +116,11 @@ document.querySelectorAll("#type button").forEach(b => b.onclick = () => setType
 $("save").onclick = save;
 $("prev").onclick = () => { if (i > 0) { i--; show(); } };
 $("next").onclick = () => { if (i < items.length - 1) { i++; show(); } };
-$("todo").onclick = () => { const j = items.findIndex((x, k) => k > i && !x.human); if (j >= 0) { i = j; show(); } };
+$("todo").onclick = () => {  // forward first, then wrap around to earlier skipped items
+  const n = items.length;
+  for (let s = 1; s <= n; s++) { const k = (i + s) % n; if (!items[k].human) { i = k; show(); return; } }
+  $("msg").textContent = "all items in this set are labelled";
+};
 $("set").onchange = load;
 document.addEventListener("keydown", (e) => {
   if (e.target.tagName === "TEXTAREA" || e.target.tagName === "INPUT") { if (e.key === "Enter" && e.target.tagName === "INPUT") save(); return; }
