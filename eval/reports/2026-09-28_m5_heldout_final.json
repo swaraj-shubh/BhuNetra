@@ -1,0 +1,722 @@
+{
+ "api": "http://127.0.0.1:8000",
+ "ts": "2026-09-27T20:33:13Z",
+ "change": {
+  "overall": {
+   "n": 121,
+   "tp": 54,
+   "fp": 22,
+   "fn": 10,
+   "tn": 35,
+   "precision": 0.7105263157894737,
+   "recall": 0.84375,
+   "f1": 0.7714285714285714,
+   "false_alarm_rate": 0.38596491228070173,
+   "type_accuracy": 0.4444444444444444,
+   "earliest_date_abs_err_days": {
+    "median": 0.0,
+    "max": 200,
+    "n": 54
+   }
+  },
+  "per_type": {
+   "water": {
+    "n": 22,
+    "tp": 11,
+    "fp": 9,
+    "fn": 2,
+    "tn": 0,
+    "precision": 0.55,
+    "recall": 0.8461538461538461,
+    "f1": 0.6666666666666667,
+    "false_alarm_rate": null,
+    "type_accuracy": 0.7272727272727273,
+    "earliest_date_abs_err_days": {
+     "median": 0,
+     "max": 0,
+     "n": 11
+    }
+   },
+   "clearance": {
+    "n": 22,
+    "tp": 20,
+    "fp": 1,
+    "fn": 1,
+    "tn": 0,
+    "precision": 0.9523809523809523,
+    "recall": 0.9523809523809523,
+    "f1": 0.9523809523809523,
+    "false_alarm_rate": null,
+    "type_accuracy": 0.45,
+    "earliest_date_abs_err_days": {
+     "median": 0.0,
+     "max": 190,
+     "n": 20
+    }
+   },
+   "construction": {
+    "n": 23,
+    "tp": 14,
+    "fp": 9,
+    "fn": 0,
+    "tn": 0,
+    "precision": 0.6086956521739131,
+    "recall": 1.0,
+    "f1": 0.7567567567567568,
+    "false_alarm_rate": null,
+    "type_accuracy": 0.42857142857142855,
+    "earliest_date_abs_err_days": {
+     "median": 0.0,
+     "max": 200,
+     "n": 14
+    }
+   },
+   "road": {
+    "n": 11,
+    "tp": 5,
+    "fp": 3,
+    "fn": 3,
+    "tn": 0,
+    "precision": 0.625,
+    "recall": 0.625,
+    "f1": 0.625,
+    "false_alarm_rate": null,
+    "type_accuracy": 0.2,
+    "earliest_date_abs_err_days": {
+     "median": 0,
+     "max": 105,
+     "n": 5
+    }
+   },
+   "other": {
+    "n": 8,
+    "tp": 4,
+    "fp": 0,
+    "fn": 4,
+    "tn": 0,
+    "precision": 1.0,
+    "recall": 0.5,
+    "f1": 0.6666666666666666,
+    "false_alarm_rate": null,
+    "type_accuracy": 0.0,
+    "earliest_date_abs_err_days": {
+     "median": 62.5,
+     "max": 160,
+     "n": 4
+    }
+   }
+  },
+  "latency_ms": {
+   "p50": 114.7,
+   "p95": 552.3,
+   "n": 60
+  },
+  "cases": [
+   {
+    "case_id": "CHG-000098",
+    "label": "no_change",
+    "pred_event": "CHG-009381"
+   },
+   {
+    "case_id": "CHG-000178",
+    "label": "change",
+    "pred_event": "CHG-009471"
+   },
+   {
+    "case_id": "CHG-000889",
+    "label": "no_change",
+    "pred_event": "CHG-010464"
+   },
+   {
+    "case_id": "CHG-001053",
+    "label": "change",
+    "pred_event": "CHG-010400"
+   },
+   {
+    "case_id": "CHG-001135",
+    "label": "no_change",
+    "pred_event": "CHG-010483"
+   },
+   {
+    "case_id": "CHG-001309",
+    "label": "no_change",
+    "pred_event": "CHG-010657"
+   },
+   {
+    "case_id": "CHG-001351",
+    "label": "change",
+    "pred_event": "CHG-010696"
+   },
+   {
+    "case_id": "CHG-001657",
+    "label": "change",
+    "pred_event": "CHG-011031"
+   },
+   {
+    "case_id": "CHG-003191",
+    "label": "change",
+    "pred_event": "CHG-012848"
+   },
+   {
+    "case_id": "CHG-003877",
+    "label": "change",
+    "pred_event": "CHG-014348"
+   },
+   {
+    "case_id": "CHG-004101",
+    "label": "change",
+    "pred_event": "CHG-014500"
+   },
+   {
+    "case_id": "CHG-004136",
+    "label": "change",
+    "pred_event": "CHG-014607"
+   },
+   {
+    "case_id": "CHG-004138",
+    "label": "change",
+    "pred_event": "CHG-014609"
+   },
+   {
+    "case_id": "CHG-004143",
+    "label": "change",
+    "pred_event": "CHG-014614"
+   },
+   {
+    "case_id": "CHG-004386",
+    "label": "change",
+    "pred_event": "CHG-014857"
+   },
+   {
+    "case_id": "CHG-004645",
+    "label": "no_change",
+    "pred_event": "CHG-013215"
+   },
+   {
+    "case_id": "CHG-004687",
+    "label": "no_change",
+    "pred_event": "CHG-013257"
+   },
+   {
+    "case_id": "CHG-004765",
+    "label": "no_change",
+    "pred_event": "CHG-013257"
+   },
+   {
+    "case_id": "CHG-004915",
+    "label": "change",
+    "pred_event": "CHG-013485"
+   },
+   {
+    "case_id": "CHG-004918",
+    "label": "change",
+    "pred_event": "CHG-013488"
+   },
+   {
+    "case_id": "CHG-004920",
+    "label": "change",
+    "pred_event": "CHG-013490"
+   },
+   {
+    "case_id": "CHG-004922",
+    "label": "change",
+    "pred_event": "CHG-013492"
+   },
+   {
+    "case_id": "CHG-004924",
+    "label": "no_change",
+    "pred_event": "CHG-013494"
+   },
+   {
+    "case_id": "CHG-004998",
+    "label": "change",
+    "pred_event": "CHG-013568"
+   },
+   {
+    "case_id": "CHG-005004",
+    "label": "change",
+    "pred_event": "CHG-013486"
+   },
+   {
+    "case_id": "CHG-005005",
+    "label": "change",
+    "pred_event": "CHG-013485"
+   },
+   {
+    "case_id": "CHG-005007",
+    "label": "change",
+    "pred_event": "CHG-013644"
+   },
+   {
+    "case_id": "CHG-005008",
+    "label": "change",
+    "pred_event": "CHG-013578"
+   },
+   {
+    "case_id": "CHG-005018",
+    "label": "no_change",
+    "pred_event": "CHG-013588"
+   },
+   {
+    "case_id": "CHG-005019",
+    "label": "change",
+    "pred_event": "CHG-013589"
+   },
+   {
+    "case_id": "CHG-005103",
+    "label": "change",
+    "pred_event": "CHG-013587"
+   },
+   {
+    "case_id": "CHG-003846",
+    "label": "change",
+    "pred_event": "CHG-014317"
+   },
+   {
+    "case_id": "CHG-003857",
+    "label": "change",
+    "pred_event": "CHG-014328"
+   },
+   {
+    "case_id": "CHG-003885",
+    "label": "no_change",
+    "pred_event": "CHG-014356"
+   },
+   {
+    "case_id": "CHG-003968",
+    "label": "change",
+    "pred_event": "CHG-014439"
+   },
+   {
+    "case_id": "CHG-004066",
+    "label": "change",
+    "pred_event": "CHG-014537"
+   },
+   {
+    "case_id": "CHG-004168",
+    "label": "change",
+    "pred_event": "CHG-014609"
+   },
+   {
+    "case_id": "CHG-004180",
+    "label": "change",
+    "pred_event": "CHG-014651"
+   },
+   {
+    "case_id": "CHG-004283",
+    "label": "change",
+    "pred_event": "CHG-014754"
+   },
+   {
+    "case_id": "CHG-004974",
+    "label": "change",
+    "pred_event": "CHG-013544"
+   },
+   {
+    "case_id": "CHG-004976",
+    "label": "change",
+    "pred_event": "CHG-013546"
+   },
+   {
+    "case_id": "CHG-005093",
+    "label": "change",
+    "pred_event": "CHG-013663"
+   },
+   {
+    "case_id": "CHG-005095",
+    "label": "change",
+    "pred_event": "CHG-013579"
+   },
+   {
+    "case_id": "CHG-000198",
+    "label": "change",
+    "pred_event": "CHG-009491"
+   },
+   {
+    "case_id": "CHG-000238",
+    "label": "no_change",
+    "pred_event": "CHG-009937"
+   },
+   {
+    "case_id": "CHG-000463",
+    "label": "change",
+    "pred_event": "CHG-009281"
+   },
+   {
+    "case_id": "CHG-000466",
+    "label": "change",
+    "pred_event": "CHG-009285"
+   },
+   {
+    "case_id": "CHG-000472",
+    "label": "no_change",
+    "pred_event": "CHG-009781"
+   },
+   {
+    "case_id": "CHG-000581",
+    "label": "no_change",
+    "pred_event": "CHG-009895"
+   },
+   {
+    "case_id": "CHG-001584",
+    "label": "change",
+    "pred_event": "CHG-010947"
+   },
+   {
+    "case_id": "CHG-001603",
+    "label": "change",
+    "pred_event": "CHG-010967"
+   },
+   {
+    "case_id": "CHG-002539",
+    "label": "change",
+    "pred_event": "CHG-011969"
+   },
+   {
+    "case_id": "CHG-002753",
+    "label": "change",
+    "pred_event": "CHG-012196"
+   },
+   {
+    "case_id": "CHG-002754",
+    "label": "change",
+    "pred_event": "CHG-012197"
+   },
+   {
+    "case_id": "CHG-002830",
+    "label": "change",
+    "pred_event": "CHG-012275"
+   },
+   {
+    "case_id": "CHG-003181",
+    "label": "change",
+    "pred_event": "CHG-012612"
+   },
+   {
+    "case_id": "CHG-003190",
+    "label": "no_change",
+    "pred_event": "CHG-012625"
+   },
+   {
+    "case_id": "CHG-003700",
+    "label": "no_change",
+    "pred_event": "CHG-014171"
+   },
+   {
+    "case_id": "CHG-003736",
+    "label": "change",
+    "pred_event": "CHG-014207"
+   },
+   {
+    "case_id": "CHG-003744",
+    "label": "no_change",
+    "pred_event": "CHG-014215"
+   },
+   {
+    "case_id": "CHG-003747",
+    "label": "no_change",
+    "pred_event": "CHG-014218"
+   },
+   {
+    "case_id": "CHG-003878",
+    "label": "no_change",
+    "pred_event": "CHG-014349"
+   },
+   {
+    "case_id": "CHG-004029",
+    "label": "change",
+    "pred_event": "CHG-014328"
+   },
+   {
+    "case_id": "CHG-004116",
+    "label": "no_change",
+    "pred_event": "CHG-014587"
+   },
+   {
+    "case_id": "CHG-004285",
+    "label": "change",
+    "pred_event": "CHG-014756"
+   },
+   {
+    "case_id": "CHG-004356",
+    "label": "change",
+    "pred_event": "CHG-014827"
+   },
+   {
+    "case_id": "CHG-004357",
+    "label": "change",
+    "pred_event": "CHG-014828"
+   },
+   {
+    "case_id": "CHG-004496",
+    "label": "change",
+    "pred_event": "CHG-013066"
+   },
+   {
+    "case_id": "CHG-004965",
+    "label": "change",
+    "pred_event": "CHG-013535"
+   },
+   {
+    "case_id": "CHG-001055",
+    "label": "no_change",
+    "pred_event": "CHG-010402"
+   },
+   {
+    "case_id": "CHG-001457",
+    "label": "change",
+    "pred_event": null
+   },
+   {
+    "case_id": "CHG-001461",
+    "label": "no_change",
+    "pred_event": null
+   },
+   {
+    "case_id": "CHG-001549",
+    "label": "no_change",
+    "pred_event": null
+   },
+   {
+    "case_id": "CHG-001552",
+    "label": "no_change",
+    "pred_event": "CHG-010911"
+   },
+   {
+    "case_id": "CHG-002007",
+    "label": "no_change",
+    "pred_event": null
+   },
+   {
+    "case_id": "CHG-002040",
+    "label": "no_change",
+    "pred_event": null
+   },
+   {
+    "case_id": "CHG-002047",
+    "label": "no_change",
+    "pred_event": null
+   },
+   {
+    "case_id": "CHG-002061",
+    "label": "change",
+    "pred_event": "CHG-010989"
+   },
+   {
+    "case_id": "CHG-002325",
+    "label": "no_change",
+    "pred_event": null
+   },
+   {
+    "case_id": "CHG-002550",
+    "label": "no_change",
+    "pred_event": null
+   },
+   {
+    "case_id": "CHG-002556",
+    "label": "no_change",
+    "pred_event": null
+   },
+   {
+    "case_id": "CHG-002571",
+    "label": "no_change",
+    "pred_event": null
+   },
+   {
+    "case_id": "CHG-003253",
+    "label": "no_change",
+    "pred_event": null
+   },
+   {
+    "case_id": "CHG-003758",
+    "label": "change",
+    "pred_event": "CHG-014229"
+   },
+   {
+    "case_id": "CHG-003881",
+    "label": "no_change",
+    "pred_event": null
+   },
+   {
+    "case_id": "CHG-003893",
+    "label": "no_change",
+    "pred_event": null
+   },
+   {
+    "case_id": "CHG-003942",
+    "label": "no_change",
+    "pred_event": "CHG-014233"
+   },
+   {
+    "case_id": "CHG-004124",
+    "label": "change",
+    "pred_event": "CHG-014595"
+   },
+   {
+    "case_id": "CHG-004702",
+    "label": "change",
+    "pred_event": null
+   },
+   {
+    "case_id": "CHG-000126",
+    "label": "change",
+    "pred_event": "CHG-009772"
+   },
+   {
+    "case_id": "CHG-001214",
+    "label": "change",
+    "pred_event": null
+   },
+   {
+    "case_id": "CHG-001224",
+    "label": "change",
+    "pred_event": null
+   },
+   {
+    "case_id": "CHG-001343",
+    "label": "no_change",
+    "pred_event": null
+   },
+   {
+    "case_id": "CHG-001413",
+    "label": "no_change",
+    "pred_event": null
+   },
+   {
+    "case_id": "CHG-001560",
+    "label": "no_change",
+    "pred_event": null
+   },
+   {
+    "case_id": "CHG-001570",
+    "label": "no_change",
+    "pred_event": null
+   },
+   {
+    "case_id": "CHG-001612",
+    "label": "no_change",
+    "pred_event": null
+   },
+   {
+    "case_id": "CHG-001654",
+    "label": "no_change",
+    "pred_event": null
+   },
+   {
+    "case_id": "CHG-001994",
+    "label": "no_change",
+    "pred_event": null
+   },
+   {
+    "case_id": "CHG-002018",
+    "label": "no_change",
+    "pred_event": null
+   },
+   {
+    "case_id": "CHG-002032",
+    "label": "no_change",
+    "pred_event": null
+   },
+   {
+    "case_id": "CHG-002048",
+    "label": "no_change",
+    "pred_event": null
+   },
+   {
+    "case_id": "CHG-002350",
+    "label": "no_change",
+    "pred_event": null
+   },
+   {
+    "case_id": "CHG-002352",
+    "label": "no_change",
+    "pred_event": null
+   },
+   {
+    "case_id": "CHG-002359",
+    "label": "no_change",
+    "pred_event": null
+   },
+   {
+    "case_id": "CHG-002372",
+    "label": "change",
+    "pred_event": null
+   },
+   {
+    "case_id": "CHG-003837",
+    "label": "change",
+    "pred_event": null
+   },
+   {
+    "case_id": "CHG-003864",
+    "label": "change",
+    "pred_event": null
+   },
+   {
+    "case_id": "CHG-003915",
+    "label": "no_change",
+    "pred_event": null
+   },
+   {
+    "case_id": "CHG-003928",
+    "label": "no_change",
+    "pred_event": null
+   },
+   {
+    "case_id": "CHG-003937",
+    "label": "no_change",
+    "pred_event": null
+   },
+   {
+    "case_id": "CHG-003959",
+    "label": "no_change",
+    "pred_event": null
+   },
+   {
+    "case_id": "CHG-004038",
+    "label": "no_change",
+    "pred_event": null
+   },
+   {
+    "case_id": "CHG-004087",
+    "label": "change",
+    "pred_event": null
+   },
+   {
+    "case_id": "CHG-004104",
+    "label": "no_change",
+    "pred_event": null
+   },
+   {
+    "case_id": "CHG-004250",
+    "label": "change",
+    "pred_event": null
+   },
+   {
+    "case_id": "CHG-004491",
+    "label": "no_change",
+    "pred_event": null
+   },
+   {
+    "case_id": "CHG-004503",
+    "label": "no_change",
+    "pred_event": null
+   },
+   {
+    "case_id": "CHG-004609",
+    "label": "change",
+    "pred_event": null
+   },
+   {
+    "case_id": "CHG-004734",
+    "label": "no_change",
+    "pred_event": null
+   },
+   {
+    "case_id": "CHG-005062",
+    "label": "no_change",
+    "pred_event": null
+   }
+  ]
+ }
+}

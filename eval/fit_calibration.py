@@ -36,12 +36,13 @@ def dataset() -> tuple[np.ndarray, np.ndarray, np.ndarray, list[dict]]:
     split = {
         r["event_id"]: r["split"] for r in csv.DictReader((LABELS / "m5_sample.csv").open(encoding="utf-8"))
     }
-    lab: dict[str, dict] = {}
-    for line in (paths.data / "labels" / "m5_human.jsonl").read_text(encoding="utf-8").splitlines():
-        if line.strip():
-            r = json.loads(line)
-            if split.get(r["event_id"]) == "calibration":
-                lab[r["event_id"]] = r
+    lab = _labels(paths.data / "labels" / "m5_human.jsonl", split)
+    blind = _labels(paths.data / "labels" / "m5_human_blind.jsonl", split)
+    both = [e for e in blind if e in lab and {lab[e]["real"], blind[e]["real"]} <= {"yes", "no"}]
+    AGREEMENT.update(
+        n_blind=len(blind), n_compared=len(both), agree=sum(lab[e]["real"] == blind[e]["real"] for e in both)
+    )
+    lab |= blind  # an independent (blind) relabel wins over the pre-label-assisted one
     snap = json.loads((LABELS / "m5_cases.geojson").read_text(encoding="utf-8"))["features"]
     X, y, g, rows = [], [], [], []
     with db.engine().connect() as conn:
@@ -76,6 +77,19 @@ def dataset() -> tuple[np.ndarray, np.ndarray, np.ndarray, list[dict]]:
             g.append(f"{p['tile_id'].split('_')[0]}_{int(row) // 8}_{int(col) // 8}")
             rows.append({"case": p["event_id"], "event_id": r["event_id"], "type": r["change_type"]})
     return np.array(X, float), np.array(y, float), np.array(g), rows
+
+
+AGREEMENT: dict[str, int] = {}
+
+
+def _labels(path: Path, split: dict[str, str]) -> dict[str, dict]:
+    """Latest label per calibration event (held-out events are never read here)."""
+    out: dict[str, dict] = {}
+    if path.exists():
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if line.strip() and split.get((r := json.loads(line))["event_id"]) == "calibration":
+                out[r["event_id"]] = r
+    return out
 
 
 def fit(X: np.ndarray, y: np.ndarray, version: str, operating_conf: float) -> EventModel:
@@ -146,7 +160,9 @@ def main() -> None:
         "n": len(y),
         "n_real": int(y.sum()),
         "groups": len(set(g)),
-        "label_source": "data/labels/m5_human.jsonl, calibration split (model pre-labels, human-accepted)",
+        "label_source": "data/labels/m5_human.jsonl, calibration split (model pre-labels, human-accepted); "
+        "blind recheck labels (m5_human_blind.jsonl) override where present",
+        "blind_recheck": AGREEMENT,
         "oof_brier": round(float(np.mean((p - y) ** 2)), 4),
         "target_precision": T.events.TARGET_PRECISION,
     }

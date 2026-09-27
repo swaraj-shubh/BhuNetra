@@ -85,11 +85,26 @@ def render(
             f" · PostGIS: {_f(idx.get('postgis_gb'), 2)} · disk free: {st['disk_free']}"
         ),
         "",
-        "## Build time (from manifests/build.json)",
-        "| stage | runs | seconds |",
-        "|---|---|---|",
-        *(f"| {s} | {n} | {t} |" for s, n, t in build_time(timings)),
-        f"| **total** | | **{round(sum(t for _, _, t in build_time(timings)), 1)}** |",
+        *(
+            [
+                f"## Build time: full index from an empty database ({fb['file']})",
+                (
+                    f"**{fb['wall_s']} s ({fb['wall_s'] / 3600:.2f} h) wall clock**, first to last step. "
+                    "Timed stages below (not every step has its own timer, so they sum to less):"
+                ),
+                "| stage | seconds |",
+                "|---|---|",
+                *(f"| {k} | {v} |" for k, v in sorted(fb["stages_s"].items(), key=lambda kv: -kv[1])),
+            ]
+            if (fb := stats.get("build"))
+            else [
+                "## Build time (from manifests/build.json)",
+                "| stage | runs | seconds |",
+                "|---|---|---|",
+                *(f"| {s} | {n} | {t} |" for s, n, t in build_time(timings)),
+                f"| **total** | | **{round(sum(t for _, _, t in build_time(timings)), 1)}** |",
+            ]
+        ),
         "",
         "Incremental ingest (one new Sentinel-2 scene, live): searchable in 254 s (`GET /jobs/{id}` timings).",
         "",

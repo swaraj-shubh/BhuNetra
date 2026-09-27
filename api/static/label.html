@@ -32,6 +32,7 @@
   <select id="set" aria-label="Label set">
     <option value="calibration">Calibration (pre-labelled: correct it)</option>
     <option value="heldout">Held-out (blind)</option>
+    <option value="recheck">Calibration recheck (blind, 100)</option>
   </select>
   <input id="who" placeholder="your name" aria-label="Labeller name" size="12">
   <input id="key" type="password" placeholder="API key (if enabled)" aria-label="API key" size="14">
@@ -86,7 +87,7 @@ function show() {
   $("count").textContent = `${i + 1}/${items.length} · labelled ${done}`;
   $("bar").style.width = `${100 * done / items.length}%`;
   $("eid").textContent = it.event_id;
-  $("systype").textContent = it.system_type ? `system says: ${it.system_type}` : "blind (held-out)";
+  $("systype").textContent = it.system_type ? `system says: ${it.system_type}` : "blind (no system type shown)";
   $("view").src = `/label/view/${it.event_id}.png`;
   const cur = it.human || it.prelabel;
   $("pre").hidden = !it.prelabel;
@@ -104,7 +105,7 @@ async function save() {
   try { localStorage.setItem("labeller", who); } catch (e) {}
   const it = items[i];
   let key = ""; try { key = localStorage.getItem("apikey") || ""; } catch (e) {}
-  const r = await fetch(`/label/${it.event_id}`, { method: "POST", headers: { "Content-Type": "application/json", ...(key ? { "X-API-Key": key } : {}) },
+  const r = await fetch(`/label/${it.event_id}${$("set").value === "recheck" ? "?blind=true" : ""}`, { method: "POST", headers: { "Content-Type": "application/json", ...(key ? { "X-API-Key": key } : {}) },
     body: JSON.stringify({ real, true_type: real === "yes" ? ttype : null, note: $("note").value, labeller: who }) });
   if (!r.ok) { $("msg").textContent = `error ${r.status}: ${await r.text()}`; return; }
   it.human = await r.json();

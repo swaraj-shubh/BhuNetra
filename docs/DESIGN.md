@@ -114,14 +114,15 @@ These are defined in the `Makefile` (create them in M0 if missing; keep this tab
 |---|---|
 | `make up` / `make down` | Start/stop the Compose stack (db, qdrant, api, worker, tiles, web) |
 | `make build` | Rebuild the api image (with the web bundle) after code changes. Online. `make up` no longer rebuilds |
-| `make up-offline` | Start with external networking disabled (the proof run) |
+| `make up-offline` | Start with external networking disabled (the proof run). The web UI stays usable through the `gate` relay (`docker/gate.py`) |
+| `make warm` | Re-read the vector index into the page cache (run by `make up`; builds evict it, cold look-alike query 7-9 s vs 0.15 s) |
 | `make test` | `pytest -q` (unit + integration on synthetic fixtures) |
 | `make lint` | `ruff check . && ruff format --check . && mypy change query governance` |
 | `make db-migrate` | Apply schema migrations |
 | `make stage` | `python scripts/stage_data.py all` (online; resumable) |
 | `make ingest AOI=<name>` | Ingest all staged scenes for an AOI |
 | `make ingest-scene SCENE=<file> AOI=<a>` | Incremental ingest of one scene (`SCENE`, since `PATH` would clobber the shell PATH); same as `POST /ingest` |
-| `make build-index AOI=<a>` | Full index build: `ingest` → `change` → `embed-eo` → `sar` (empty AOI = all) |
+| `make build-index AOI=<a>` | Full index build: `ingest` → `change` → `embed-eo` → `sar` → `landsat` → `calibrate` (empty AOI = all) |
 | `make reconcile` | Rebuild/repair Qdrant from PostGIS |
 | `make audit-verify` | Recompute the audit hash chain |
 | `make bench-clip` | M1 go/no-go CLIP benchmark (EuroSAT + own tiles) |
@@ -271,7 +272,7 @@ GET  /audit/verify                                               -> {ok, broken_
 GET  /stats                                                      -> area, scenes, tiles, storage, latency
 ```
 Every `site` and `event` in a response includes `provenance: {scene_ids, model_versions, cascade_version}`.
-Implemented so far: `GET /stats`, `POST /search/text` (parser + fusion, returns `query_id`), `GET /change`, `GET /events/{id}`, `POST /feedback` (Rocchio), `POST /export` (Ed25519-signed zip: geojson, `format: gpkg` adds `export.gpkg` via a stdlib GeoPackage writer `api/gpkg.py`), `GET /audit/verify`; extras `POST /export/verify`, `GET /chips/{tile_id}/{season}.png`, `/label*` (M5 labelling). **Auth (M8):** `X-API-Key` → `governance/rbac.py` roles viewer < analyst < admin, enforced when `data/keys/users.yaml` exists (`python -m governance.rbac add <name> <role>`); chips stay unauthenticated (loaded by `<img>`).
+Implemented so far: `GET /stats`, `POST /search/text` (parser + fusion, returns `query_id`), `GET /change`, `GET /events/{id}`, `POST /feedback` (Rocchio), `POST /export` (Ed25519-signed zip: geojson, `format: gpkg` adds `export.gpkg` via a stdlib GeoPackage writer `api/gpkg.py`), `GET /audit/verify`; extras `POST /export/verify`, `GET /chips/{tile_id}/{season}.png`, `/label*` (M5 labelling). `GET /change` also takes optional `unreviewed`, `limit` (workbench paging; response adds `total`) and `all_types` (types in `events.HIDDEN_TYPES`, today `other`, are hidden unless asked). `GET /events/{id}` adds `location`, `area_ha`, `sensors`, `observations` (actual last-normal / first-changed scenes), `images` (before/after composites with acquisition dates) and `history` (audit entries). **Auth (M8):** `X-API-Key` → `governance/rbac.py` roles viewer < analyst < admin, enforced when `data/keys/users.yaml` exists (`python -m governance.rbac add <name> <role>`); chips stay unauthenticated (loaded by `<img>`).
 
 ---
 

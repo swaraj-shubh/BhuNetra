@@ -49,3 +49,20 @@ def test_save_validates_and_latest_label_wins(tmp_path, monkeypatch):
     c.post("/label/CHG-000002", json={"real": "no", "labeller": "b"})
     item = c.get("/label/items", params={"set": "heldout"}).json()["items"][0]
     assert item["human"]["real"] == "no" and item["human"]["labeller"] == "b"
+
+
+def test_recheck_is_blind_and_saves_separately(tmp_path, monkeypatch):
+    c = _client(tmp_path, monkeypatch)
+    monkeypatch.setattr(label, "BLIND", tmp_path / "blind.jsonl")
+    c.post("/label/CHG-000001", json={"real": "no", "labeller": "a"})  # pre-label-assisted label
+    items = c.get("/label/items", params={"set": "recheck"}).json()["items"]
+    assert items == [{"event_id": "CHG-000001", "human": None}]  # no prelabel, no type, earlier label hidden
+    assert (
+        c.post(
+            "/label/CHG-000002?blind=true", json={"real": "yes", "true_type": "water", "labeller": "a"}
+        ).status_code
+        == 404
+    )
+    c.post("/label/CHG-000001?blind=true", json={"real": "yes", "true_type": "construction", "labeller": "b"})
+    assert c.get("/label/items", params={"set": "recheck"}).json()["items"][0]["human"]["real"] == "yes"
+    assert c.get("/label/items", params={"set": "calibration"}).json()["items"][0]["human"]["real"] == "no"

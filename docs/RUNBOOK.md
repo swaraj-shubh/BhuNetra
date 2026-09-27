@@ -68,13 +68,17 @@ change refresh complete in 1,029 s (dholera, 2026-09-23 scene).
 ## 4. Offline operation
 
 - **Proof that nothing reaches the internet:** `make up-offline` (the app network is `internal: true`) then
-  `make offline-check` (the api answers locally; an external URL fails). Published ports do not work on an
-  internal network, so this mode is for the proof, not for browsing.
+  `make offline-check`: the api answers locally, an external URL fails from inside the api container, and the
+  web UI answers on `http://localhost:8000` through `gate` (`docker/gate.py`, a stdlib relay run from the api
+  image, the only container on a normal network). The whole workbench is usable in this mode (checked 2026-09-28:
+  search, look-alikes, groups, review, export, system tab).
 - **Demo:** disconnect the host from the network (unplug / disable the interface), then `make up` and open
   `http://localhost:8000`. The app loads models from local paths only (`HF_HUB_OFFLINE=1`), and the web bundle
   has no CDN assets or online basemaps.
-- After a restart Qdrant reads its storage into memory in the background (~20 s for 2.3 GB); queries in that
-  window are slower.
+- `make up` / `make up-offline` end by re-reading the vector index into the page cache (`make warm`, ~15 s):
+  image builds evict it, and a cold look-alike query took 7-9 s instead of 0.15 s. Run `make warm` before a demo
+  if anything heavy ran on the machine since.
+- The api warms the clustering library at startup (numba JIT); "Groups" answers in ~2 s from the first click.
 
 ## 5. Evaluation and report
 
@@ -87,8 +91,9 @@ make report                                          # -> eval/reports/<date>_re
 - `cases.geojson`: features with `{"case_id", "label": "change" | "no_change", "t1", "t2", "type"?, "earliest_date"?}`
 - Scoring uses only the public API (`/search/text`, `/change`) and matches by geometry (EPSG:4326), so hidden
   sets need no conversion. Our own labels convert with `eval/to_eval_format.py`.
-- The report reads every number from measurements (`/stats`, `manifests/build.json`, the eval output, hardware,
-  model / dataset manifests).
+- The report reads every number from measurements (`/stats`, the timed full build `manifests/build_full_*.json`
+  as wall clock, the eval output, hardware, model / dataset manifests).
+- The workbench **System** tab shows the same PS 2.3 figures live.
 
 ## 6. Integrity checks
 

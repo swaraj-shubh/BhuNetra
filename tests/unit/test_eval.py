@@ -64,3 +64,18 @@ def test_change_metrics_confusion_type_and_date():
     assert m["precision"] == 0.5 and m["recall"] == 0.5 and m["f1"] == pytest.approx(0.5)
     assert m["false_alarm_rate"] == pytest.approx(1 / 3)
     assert m["type_accuracy"] == 1.0 and m["earliest_date_abs_err_days"]["median"] == 10
+
+
+def test_retrieval_precision_counts_judged_yes_no_only():
+    from eval.retrieval_pool import precision_at_k
+
+    sites = [{"tile_id": f"t{i}"} for i in range(12)]
+    judged = {
+        ("q01", "t0"): {"relevant": "yes"},
+        ("q01", "t1"): {"relevant": "no"},
+        ("q01", "t2"): {"relevant": "yes"},
+        ("q01", "t3"): {"relevant": "unsure"},
+        ("q01", "t11"): {"relevant": "yes"},
+    }  # rank 12: outside the top 10
+    p = precision_at_k(sites, judged, "q01")
+    assert p == {"p_at_k": 0.667, "relevant": 2, "not_relevant": 1, "unsure": 1, "unjudged": 6}

@@ -62,8 +62,17 @@ Every site and event in a response carries `provenance {scene_ids, model_version
 
 ## 4. Review, governance, export
 
-- Analyst queue with before/after chips, index timeline and evidence; confirm / reject (+ reason) → Rocchio
-  re-rank live; rejected sites drop out; decisions go to the calibration pool.
+- Workbench (React + MapLibre, offline bundle, no basemap) with three tabs:
+  **Search places** (text query + area / date / sensor filters, numbered results on the map, look-alikes and
+  look-alike groups, ✓ / ✗ feedback → Rocchio re-rank live, signed download);
+  **Review changes** (area + time window + type, most confident first; low-confidence and unreliable types hidden
+  unless asked);
+  **System** (the PS 2.3 figures live: area, scenes, tiles, build time, storage, latency, hardware).
+- Every change opens one evidence panel (PS 2.2.5): before / after composites with the acquisition dates they
+  were built from, coordinates and changed area (ha), the actual last-normal and first-changed observations
+  (scene id, sensor, quality), Landsat / Sentinel-1 verdicts, the index timeline, and its processing history from
+  the audit log. Confidence is shown as high / medium / low, not as a probability (blind held-out precision is
+  0.71, so a percentage would overstate it). Confirm / reject (+ reason) is audited and feeds the calibration pool.
 - `audit_log`: `entry_hash = sha256(prev_hash ‖ ts ‖ actor ‖ action ‖ payload)`; `GET /audit/verify` recomputes it.
 - Exports: zip with GeoJSON + provenance + sha256 manifest, **Ed25519-signed**; `POST /export/verify`.
 - Model weights are sha256-checked against `manifests/models.yaml` before loading; API keys with
@@ -79,8 +88,11 @@ change cascade and SAR evidence for that AOI. No index rebuild. Measured live: s
 
 Cloud / shadow / haze → masks and `q` gating; season → harmonic baseline; single-date noise → persistence;
 misregistration → shift term in `q`; sensor differences → per-item scale/offset and no cross-sensor pixel
-differencing; SAR agreement as independent evidence. Precision is preferred: uncertain candidates stay stored
-but hidden below the operating confidence.
+differencing; SAR and Landsat agreement as independent evidence, combined with the rule score by a calibration
+model fitted on our calibration split (logistic, then isotonic). Precision is preferred: uncertain candidates stay
+stored but hidden below the operating confidence (0.55, the lowest threshold reaching 0.85 out-of-fold precision
+on calibration data), and change types that never reach that precision (today "other") are hidden unless asked.
+"Near X" in a query is a hard distance limit.
 
 ## 7. Honest capability
 
