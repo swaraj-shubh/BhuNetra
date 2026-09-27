@@ -117,6 +117,46 @@ def stats() -> dict:
         else "disabled (dev)",
         "weights_error": WEIGHT_ERROR or None,
         "staging_report": json.loads(report.read_text(encoding="utf-8")) if report.exists() else None,
+        "build": _build_record(),
+        "hardware": _hardware(),
+    }
+
+
+def _build_record() -> dict | None:
+    """Seconds per stage of the latest timed full build (manifests/build_full_*.json; PS 2.3 'build time')."""
+    runs = sorted((paths.root / "manifests").glob("build_full_*.json"))
+    if not runs:
+        return None
+    from datetime import datetime, timedelta
+
+    t = json.loads(runs[-1].read_text(encoding="utf-8"))["timings"]
+    stages = {k: round(sum(e["s"] for e in v)) for k, v in t.items()}
+    es = [e for v in t.values() for e in v]
+    start = min(datetime.fromisoformat(e["ts"]) - timedelta(seconds=e["s"]) for e in es)
+    end = max(datetime.fromisoformat(e["ts"]) for e in es)
+    # wall clock: stage timers do not cover every step (e.g. eo_vec batching), so their sum understates the build
+    return {"file": runs[-1].name, "wall_s": round((end - start).total_seconds()), "stages_s": stages}
+
+
+def _hardware() -> dict:
+    import os
+    import platform
+    import subprocess
+
+    import psutil
+
+    gpu = None
+    if shutil.which("nvidia-smi"):
+        gpu = subprocess.run(
+            ["nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader"],
+            capture_output=True,
+            check=False,
+            text=True,
+        ).stdout.strip()
+    return {
+        "cpu": f"{platform.machine()} x{os.cpu_count()}",
+        "ram_gb": round(psutil.virtual_memory().total / 1e9, 1),
+        "gpu": gpu or None,  # None: not visible to the api container (the worker holds the GPU)
     }
 
 
@@ -137,7 +177,7 @@ def search_text(q: TextQuery, user: dict = VIEWER) -> dict:
 
     t0 = time.perf_counter()
     p = parser.parse(q.query)
-    out = retrieve.search(p, retrieve.Request(aoi=q.aoi, date_range=q.date_range, k=q.k))
+    out = retrieve.search(p, retrieve.Request(aoi=q.aoi, date_range=q.date_range, k=q.k, sensor=q.sensor))
     qid = db.uuid7()
     with db.engine().begin() as conn:
         conn.execute(
@@ -244,7 +284,10 @@ def rerank(query_id: str) -> dict:
     )
     rejected = frozenset(t for t, d in decided.items() if d == "reject")
     out = retrieve.search(
-        p, retrieve.Request(aoi=req.aoi, date_range=req.date_range, k=req.k), vec=vec, exclude_tiles=rejected
+        p,
+        retrieve.Request(aoi=req.aoi, date_range=req.date_range, k=req.k, sensor=req.sensor),
+        vec=vec,
+        exclude_tiles=rejected,
     )
     return {"query_id": query_id, "feedback": decided, "sites": out["sites"], "warnings": out["warnings"]}
 
@@ -319,7 +362,7 @@ def event(event_id: str, user: dict = VIEWER) -> dict:
         r = (
             conn.execute(
                 text(
-                    f"SELECT {EVENT_COLS}, e.evidence FROM change_events e JOIN tiles t USING (tile_id) "
+                    f"SELECT {EVENT_COLS}, e.evidence, e.sensors FROM change_events e JOIN tiles t USING (tile_id) "
                     "WHERE e.event_id = :i"
                 ),
                 {"i": event_id},
@@ -327,9 +370,96 @@ def event(event_id: str, user: dict = VIEWER) -> dict:
             .mappings()
             .first()
         )
-    if r is None:
-        raise HTTPException(404)
-    return _event(r) | {"evidence": r["evidence"]}
+        if r is None:
+            raise HTTPException(404)
+        extra = _event_context(conn, r)
+    return _event(r) | {"evidence": r["evidence"]} | extra
+
+
+def _pick_images(comps: list[dict], ln: str | None, es: str) -> dict:
+    """Before = latest composite ending on/before the last normal date; after = first composite starting on/after
+    the earliest supported date, same season of year as before if possible. Dry seasons preferred (monsoon patchy)."""
+    wet = lambda c: c["season"].endswith("JJAS")
+    pre = [c for c in comps if c["end_date"] <= (ln or es)]
+    before = max(pre, key=lambda c: (not wet(c), c["end_date"]), default=None)
+    post = [c for c in comps if c["start_date"] >= es]
+    same = [c for c in post if before and c["season"].split("-")[1] == before["season"].split("-")[1]]
+    after = min(same or post, key=lambda c: (wet(c), c["start_date"]), default=None)
+    return {"before": before, "after": after}
+
+
+def _event_context(conn, r) -> dict:
+    """What an analyst needs next to the event (PS 2.2.5): location, size, the actual observations and sensors behind
+    the dates, the composites shown as before/after (with their acquisition dates), and the processing history."""
+    loc = conn.execute(
+        text(
+            "SELECT ST_Y(ST_Centroid(geom)), ST_X(ST_Centroid(geom)), ST_Area(geom::geography) / 1e4 "
+            "FROM change_events WHERE event_id = :i"
+        ),
+        {"i": r["event_id"]},
+    ).one()
+    dates = [d for d in (r["last_normal_date"], r["earliest_supported_date"]) if d]
+    obs = {
+        str(o["acq_date"]): dict(o)
+        for o in conn.execute(
+            text(
+                "SELECT s.acq_date, s.scene_id, s.source, round(o.q::numeric, 2) AS q FROM observations o "
+                "JOIN scenes s USING (scene_id) WHERE o.tile_id = :t AND s.acq_date = ANY(:d)"
+            ),
+            {"t": r["tile_id"], "d": dates},
+        ).mappings()
+    }
+    comps = [
+        {
+            "season": c["season"],
+            "start_date": str(c["start_date"]),
+            "end_date": str(c["end_date"]),
+            "n_obs": c["n_obs"],
+            "dates": sorted(o["date"] for o in c["obs"] or []),
+            "scene_ids": sorted(o["scene_id"] for o in c["obs"] or []),
+            "chip_url": f"/chips/{r['tile_id']}/{c['season']}.png",
+        }
+        for c in conn.execute(
+            text(
+                "SELECT season, start_date, end_date, n_obs, lineage->'observations' AS obs FROM composites "
+                "WHERE tile_id = :t ORDER BY start_date"
+            ),
+            {"t": r["tile_id"]},
+        ).mappings()
+    ]
+    ln = str(r["last_normal_date"]) if r["last_normal_date"] else None
+    history = [
+        {
+            "ts": h["ts"].isoformat(timespec="seconds"),
+            "actor": h["actor"],
+            "action": h["action"],
+            "payload": h["payload"],
+        }
+        for h in conn.execute(
+            text(
+                "SELECT ts, actor, action, payload FROM audit_log WHERE "
+                "(action IN ('change.run', 'change.sar_evidence', 'change.landsat_evidence', 'change.calibrate') "
+                "AND payload->>'aoi' = :a) OR (action LIKE 'feedback.%' AND payload->'target'->>'id' = :i) "
+                "OR (action = 'export' AND payload::text LIKE :p) ORDER BY seq"
+            ),
+            {"a": r["aoi"], "i": r["event_id"], "p": f'%"{r["event_id"]}"%'},
+        ).mappings()
+    ]
+    runs = [i for i, h in enumerate(history) if h["action"] == "change.run"]
+    history = (
+        history[runs[-1] :] if runs else history
+    )  # event ids are new on every run: earlier runs made other events
+    return {
+        "location": {"lat": round(loc[0], 5), "lon": round(loc[1], 5)},
+        "area_ha": round(loc[2], 2),
+        "sensors": list(r["sensors"]),
+        "observations": {
+            "last_normal": obs.get(ln) if ln else None,
+            "first_changed": obs.get(str(r["earliest_supported_date"])),
+        },
+        "images": _pick_images(comps, ln, str(r["earliest_supported_date"])),
+        "history": history,
+    }
 
 
 @app.get("/chips/{tile_id}/{season}.png")

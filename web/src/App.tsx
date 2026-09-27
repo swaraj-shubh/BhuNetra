@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import Review, { type EventRow, seasonLabel, seasonOf, TYPE_COLOUR, typeLabel } from "./Review";
+import Review, { ConfTag, EvidencePanel, type EventRow, type FullEvent, seasonLabel, SENSOR_TEXT, TYPE_COLOUR, typeLabel } from "./Review";
+import System from "./System";
 import * as maplibregl from "maplibre-gl";
 import type { GeoJSONSource, LngLatBoundsLike, MapLayerMouseEvent } from "maplibre-gl";
 // v6 looks for its worker next to its own module, which does not exist once bundled: bundle it and point there.
@@ -14,6 +15,7 @@ type Site = {
   tile_id: string;
   aoi: string;
   season: string | null;
+  matched_season: string | null;
   score: number;
   q_mean: number | null;
   parts: Record<string, number>;
@@ -42,7 +44,6 @@ const EXAMPLES = ["newly built structures near a river", "land clearing since 20
 const AOIS = ["", "dholera", "hasdeo", "navimumbai"];
 const GROUP_COLOURS = ["#e6194b", "#3cb44b", "#4363d8", "#f58231", "#911eb4", "#42d4f4"];
 const EMPTY: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
-const pct = (v: number) => `${Math.round(v * 100)}%`;
 const monthYear = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { month: "short", year: "numeric" });
 const fmtDist = (m: number) => (m < 50 ? "touches" : m < 1000 ? `${Math.round(m)} m from` : `${(m / 1000).toFixed(1)} km from`);
 
@@ -58,7 +59,7 @@ function headline(s: Site) {
   return (
     <span>
       <i className="dot" style={{ background: TYPE_COLOUR[best.change_type] }} />
-      <b>{typeLabel(best.change_type)}</b> detected, first seen <b>{monthYear(since)}</b> · {pct(best.confidence)} likely real
+      <b>{typeLabel(best.change_type)}</b> detected, first seen <b>{monthYear(since)}</b> · <ConfTag c={best.confidence} />
       {s.events.length > 1 && <span className="muted"> (+{s.events.length - 1} more)</span>}
     </span>
   );
@@ -78,7 +79,11 @@ export default function App() {
   const [selected, setSelected] = useState<string | null>(null);
   const [status, setStatus] = useState("");
   const [ready, setReady] = useState(false);
-  const [tab, setTab] = useState<"search" | "review">("search");
+  const [tab, setTab] = useState<"search" | "review" | "system">("search");
+  const [t1, setT1] = useState("");
+  const [t2, setT2] = useState("");
+  const [sensor, setSensor] = useState("");
+  const [selEvent, setSelEvent] = useState<FullEvent | null>(null);
   const [queryId, setQueryId] = useState<string | null>(null);
   const [fb, setFb] = useState<Record<string, string>>({});
   const [groups, setGroups] = useState<{ seed: string; list: Group[]; noise: number } | null>(null);
@@ -158,7 +163,7 @@ export default function App() {
     clearClusters();
     const t0 = performance.now();
     try {
-      const r = await fetch("/search/text", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ query: q, aoi: aoi || null }) });
+      const r = await fetch("/search/text", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ query: q, aoi: aoi || null, date_range: t1 || t2 ? [t1 || null, t2 || null] : null, sensor: sensor || null }) });
       if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
       const body = await r.json();
       const md: Mode = { kind: "text", query: q };
@@ -247,9 +252,18 @@ export default function App() {
   }
 
   const sel = sites.find((s) => s.tile_id === selected);
+  const selBest = sel && sel.events.length ? [...sel.events].sort((a, b) => b.confidence - a.confidence)[0].event_id : null;
+  useEffect(() => {
+    setSelEvent(null);
+    showEvent(null);
+    if (!selBest) return;
+    let live = true;
+    fetch(`/events/${selBest}`).then((r) => r.json()).then((d) => { if (live) { setSelEvent(d); showEvent(d); } });
+    return () => { live = false; };
+  }, [selBest]); // eslint-disable-line react-hooks/exhaustive-deps
   const pills = parsed && mode?.kind === "text" ? [
     parsed.change ? `Looking for change: ${parsed.change_types.map(typeLabel).join(" / ") || "any type"}` : "Looking at appearance (no change filter)",
-    ...Object.entries(parsed.near).map(([t, m]) => `Within ${m / 1000} km of ${t}`),
+    ...Object.entries(parsed.near).map(([t, m]) => `Within ${m / 1000} km of ${t === "water" ? "water (river, lake, reservoir, creek or salt pan: not told apart)" : t}`),
     parsed.date_range ? `Dates ${parsed.date_range[0] ?? "…"} → ${parsed.date_range[1] ?? "…"}` : null,
     parsed.aoi ? `Area: ${parsed.aoi}` : null,
     `Appearance: “${parsed.semantic}”`,
@@ -265,15 +279,24 @@ export default function App() {
         <div className="tabs" role="tablist">
           <button role="tab" aria-selected={tab === "search"} className={tab === "search" ? "on" : ""} onClick={() => setTab("search")}>Search places</button>
           <button role="tab" aria-selected={tab === "review"} className={tab === "review" ? "on" : ""} onClick={() => { setTab("review"); clearClusters(); }}>Review changes</button>
+          <button role="tab" aria-selected={tab === "system"} className={tab === "system" ? "on" : ""} onClick={() => setTab("system")}>System</button>
         </div>
 
-        {tab === "review" ? <Review onShow={showEvent} /> : <>
+        {tab === "system" ? <System /> : tab === "review" ? <Review onShow={showEvent} /> : <>
           <form onSubmit={(e) => { e.preventDefault(); runSearch(query); }}>
             <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Describe what you are looking for…" autoFocus />
             <select value={aoi} onChange={(e) => setAoi(e.target.value)} aria-label="Area of interest">
               {AOIS.map((a) => <option key={a} value={a}>{a ? `Area: ${a}` : "All areas"}</option>)}
             </select>
             <button type="submit" className="primary">Search</button>
+            <div className="row dates">
+              <label>Changed/imaged from <input type="date" value={t1} onChange={(e) => setT1(e.target.value)} /></label>
+              <label>to <input type="date" value={t2} onChange={(e) => setT2(e.target.value)} /></label>
+            </div>
+            <select value={sensor} onChange={(e) => setSensor(e.target.value)} aria-label="Sensor">
+              <option value="">Any sensor</option>
+              {Object.entries(SENSOR_TEXT).map(([k, v]) => <option key={k} value={k}>{k === "sentinel2" ? v : `Changes confirmed by ${v}`}</option>)}
+            </select>
           </form>
           {!mode && (
             <div className="examples">
@@ -316,7 +339,7 @@ export default function App() {
                     {"water" in s.dist_m && <span>· {fmtDist(s.dist_m.water)} water</span>}
                     {"road" in s.dist_m && s.dist_m.road < 2000 && <span>· {fmtDist(s.dist_m.road)} road</span>}
                   </div>
-                  <div className="line muted">{s.aoi} · image: {seasonLabel(s.season)}{s.q_mean !== null && s.q_mean < 0.8 ? " · partly cloudy" : ""}</div>
+                  <div className="line muted">{s.aoi} · picture: {seasonLabel(s.season)}{s.events.length ? " (current state)" : ""}{s.q_mean !== null && s.q_mean < 0.8 ? " · partly cloudy" : ""}</div>
                   <div className="actions" onClick={(e) => e.stopPropagation()}>
                     <button className="ghost small" title="Find other places that look like this (image search)" onClick={() => similar(s)}>Find look-alikes</button>
                     <button className="ghost small" title="Colour groups of look-alike places on the map" onClick={() => clusters(s)}>Group look-alikes</button>
@@ -333,15 +356,9 @@ export default function App() {
           {sel && (
             <section className="detail">
               <h2>Place #{sel.rank}: details</h2>
-              {sel.events.length > 0 ? (() => {
-                const since = sel.events.map((e) => e.earliest_supported_date).sort()[0];
-                return (
-                  <div className="pair">
-                    <figure><img src={`/chips/${sel.tile_id}/${seasonOf(since, -1)}.png?size=160`} alt="before" onError={(e) => ((e.target as HTMLImageElement).style.visibility = "hidden")} /><figcaption>Before: {seasonLabel(seasonOf(since, -1))}</figcaption></figure>
-                    <figure><img src={`/chips/${sel.tile_id}/${seasonOf(since, 1)}.png?size=160`} alt="after" onError={(e) => ((e.target as HTMLImageElement).style.visibility = "hidden")} /><figcaption>After: {seasonLabel(seasonOf(since, 1))}</figcaption></figure>
-                  </div>
-                );
-              })() : sel.chip_url && <img src={`${sel.chip_url}?size=160`} alt="" className="big" />}
+              {sel.events.length > 0
+                ? (selEvent ? <EvidencePanel ev={selEvent} /> : <p className="muted">Loading evidence…</p>)
+                : sel.chip_url && <><img src={`${sel.chip_url}?size=160`} alt="" className="big" /><p className="muted">{seasonLabel(sel.season)} image; no change stored at this place.</p></>}
               <h3>Why it is ranked here</h3>
               <table className="why"><tbody>
                 <tr><td>Looks like your description</td><td><Bar v={sel.parts.sim_norm ?? 0} /></td></tr>
@@ -349,11 +366,12 @@ export default function App() {
                 <tr><td>Image quality (cloud-free)</td><td><Bar v={sel.parts.q ?? 0} /></td></tr>
                 <tr><td>Fits the place you asked for</td><td><Bar v={sel.parts.spatial_fit ?? 0} /></td></tr>
               </tbody></table>
-              {sel.events.map((e) => (
-                <p key={e.event_id} className="evline"><i className="dot" style={{ background: TYPE_COLOUR[e.change_type] }} />{typeLabel(e.change_type)} · first seen {e.earliest_supported_date} · {pct(e.confidence)} likely real <span className="muted">({e.event_id})</span></p>
+              {sel.events.length > 1 && <h3>All changes at this place</h3>}
+              {sel.events.length > 1 && sel.events.map((e) => (
+                <p key={e.event_id} className="evline"><i className="dot" style={{ background: TYPE_COLOUR[e.change_type] }} />{typeLabel(e.change_type)} · first seen {e.earliest_supported_date} · <ConfTag c={e.confidence} /> <span className="muted">({e.event_id})</span></p>
               ))}
               <details>
-                <summary>Source images and processing (provenance)</summary>
+                <summary>Search provenance (images and models behind this result)</summary>
                 <p>Satellite scenes used: {sel.provenance.scene_ids.length}</p>
                 <p className="mono">{sel.provenance.scene_ids.join(", ")}</p>
                 <p>Models: {Object.entries(sel.provenance.model_versions).map(([k, v]) => `${k} = ${v}`).join(", ") || "—"}</p>
@@ -386,7 +404,7 @@ export default function App() {
             <div><i className="sw line" style={{ borderColor: "#f5b400" }} /> Result (satellite image inside)</div>
             <div><i className="sw line" style={{ borderColor: "#fff" }} /> Selected result</div>
           </>}
-          {showEventLayer && tab === "review" && <div><i className="sw" style={{ background: "rgba(255,59,48,.5)", borderColor: "#ff3b30" }} /> Area that changed</div>}
+          {showEventLayer && tab !== "system" && <div><i className="sw" style={{ background: "rgba(255,59,48,.5)", borderColor: "#ff3b30" }} /> Area that changed</div>}
           {tab === "review" && !showEventLayer && <div className="muted">Pick a change on the left</div>}
           {groups && <>
             <div className="muted" style={{ marginTop: 6 }}>Look-alike groups</div>

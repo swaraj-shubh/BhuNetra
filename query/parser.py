@@ -84,8 +84,10 @@ def parse(text: str) -> Parsed:
     if aois and (m := re.search(rf"\b(?:in|at|over)?\s*({_alt(list(aois))})\b", s)):
         aoi, s = m.group(1), _cut(s, m.span())
 
-    change = _has(s, lexicon["change_cues"])
-    types = tuple(t for t, ws in lexicon["change_types"].items() if change and _has(s, ws))
+    typed = tuple(t for t, ws in lexicon["change_types"].items() if _has(s, ws))
+    # "construction since 2023": a type word plus a time phrase asks what changed, even without a cue word
+    change = _has(s, lexicon["change_cues"]) or (dates is not None and bool(typed))
+    types = typed if change else ()
     warnings = ("below_resolution",) if _has(s, lexicon["below_resolution"]) else ()
 
     sem = re.sub(rf"\b(?:{_alt(lexicon['semantic_drop'])})\b", " ", s)

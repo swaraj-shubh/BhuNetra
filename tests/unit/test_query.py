@@ -82,6 +82,19 @@ NEAR = T.context.NEAR_M
             False,
             "industrial buildings",
         ),
+        # a type word plus a time phrase is a change question even without a cue word
+        ("construction since 2023", True, ("construction",), {}, ("2023-01-01", None), None, None, False, ""),
+        (
+            "mining between 2021 and 2024",
+            True,
+            ("clearance",),
+            {},
+            ("2021-01-01", "2024-12-31"),
+            None,
+            None,
+            False,
+            "",
+        ),
         # change with no specific type = any type
         (
             "what changed near the river since 2020",
@@ -203,3 +216,19 @@ def test_image_search_excludes_tiles_sharing_ground_with_the_seed():
 
     ex = overlapping("navimumbai_43N_0038_0020")
     assert len(ex) == 9 and "navimumbai_43N_0039_0021" in ex and "navimumbai_43N_0040_0020" not in ex
+
+
+def test_before_after_images_bracket_the_change_and_prefer_dry_seasons():
+    from api.main import _pick_images
+
+    c = lambda s, a, b: {"season": s, "start_date": a, "end_date": b}
+    comps = [
+        c("2021-MAM", "2021-03-01", "2021-05-31"),
+        c("2021-JJAS", "2021-06-01", "2021-09-30"),
+        c("2022-JJAS", "2022-06-01", "2022-09-30"),
+        c("2022-ON", "2022-10-01", "2022-11-30"),
+        c("2023-MAM", "2023-03-01", "2023-05-31"),
+    ]
+    got = _pick_images(comps, "2021-10-05", "2022-06-10")
+    assert got["before"]["season"] == "2021-MAM"  # dry beats the later monsoon composite
+    assert got["after"]["season"] == "2023-MAM"  # same season of year as before, after the change

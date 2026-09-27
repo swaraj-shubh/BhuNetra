@@ -26,6 +26,7 @@ class Request:
     aoi: str | None
     date_range: tuple[str | None, str | None] | None
     k: int
+    sensor: str | None = None  # change branch: only events this sensor supports (change_events.sensors)
 
 
 def _pl(h: qm.ScoredPoint) -> dict[str, Any]:
@@ -65,7 +66,7 @@ def semantic_for_tiles(vec, tiles: list[str]) -> dict[str, qm.ScoredPoint]:
     return _best_per_tile(qdrant.search_best_per_tile(vec, "text_vec", len(tiles), flt))
 
 
-def events(conn, p: Parsed, aoi: str | None, date_range) -> dict[str, list[dict]]:
+def events(conn, p: Parsed, aoi: str | None, date_range, sensor: str | None = None) -> dict[str, list[dict]]:
     """Stored events matching the change intent, above the operating threshold (precision first, §2.11)."""
     where = ["e.confidence >= :c"]
     params: dict[str, Any] = {"c": T.events.OPERATING_CONF, "n": T.retrieval.TOP_N}
@@ -81,6 +82,9 @@ def events(conn, p: Parsed, aoi: str | None, date_range) -> dict[str, list[dict]
     if date_range and date_range[1]:
         where.append("e.earliest_supported_date <= CAST(:t2 AS date)")
         params["t2"] = date_range[1]
+    if sensor:
+        where.append(":sensor = ANY(e.sensors)")
+        params["sensor"] = sensor
     rows = conn.execute(
         text(
             "SELECT e.event_id, e.tile_id, e.change_type::text AS change_type, e.confidence, "
@@ -103,14 +107,17 @@ def search(p: Parsed, req: Request, vec=None, exclude_tiles: frozenset[str] = fr
     aoi = req.aoi or p.aoi
     date_range = req.date_range or p.date_range
     warnings = list(p.warnings)
-    if p.sensor and p.sensor not in INDEXED_SENSORS:
-        warnings.append(f"sensor_not_indexed:{p.sensor}")
+    sensor = req.sensor or p.sensor
+    if (
+        sensor and sensor not in INDEXED_SENSORS and not p.change
+    ):  # change events carry every supporting sensor
+        warnings.append(f"sensor_not_indexed:{sensor}")
     if vec is None:
         vec = embed_clip.embed_text(p.semantic)
 
     with db.engine().connect() as conn:
         near = _available_near(conn, p.near, aoi, warnings)
-        ev = events(conn, p, aoi, date_range) if p.change else {}
+        ev = events(conn, p, aoi, date_range, req.sensor or p.sensor) if p.change else {}
         if p.change:  # change intent: candidates are sites with a matching stored event, re-ranked by meaning
             sem = semantic_for_tiles(vec, sorted(ev))
             tiles = sorted(ev)
@@ -186,14 +193,25 @@ def _assemble(conn, tiles: list[str], sem: dict, ev: dict, near: dict[str, float
             )
         )
     sites = dedup(fuse(cands, near, fusion), T.retrieval.DEDUP_RADIUS_M)[:k]
-    return [_site(rank, s, prov) for rank, s in enumerate(sites, 1)]
+    changed = [s.head.cand.tile_id for s in sites if any(m.cand.payload["events"] for m in s.members)]
+    latest = dict(  # change sites show their current state (latest dry season), not the best-matching season
+        conn.execute(
+            text(
+                "SELECT DISTINCT ON (tile_id) tile_id, season FROM composites WHERE tile_id = ANY(:t) "
+                "ORDER BY tile_id, season LIKE '%JJAS', end_date DESC"
+            ),
+            {"t": changed},
+        ).all()
+    )
+    return [_site(rank, s, prov, latest.get(s.head.cand.tile_id)) for rank, s in enumerate(sites, 1)]
 
 
-def _site(rank: int, site: Site, prov: dict) -> dict:
+def _site(rank: int, site: Site, prov: dict, shown_season: str | None = None) -> dict:
     head = site.head
     h = head.cand.payload["hit"]
     evs = [e for m in site.members for e in m.cand.payload["events"]]
     comp = prov.get(_pl(h)["comp_id"]) if h else None
+    season = shown_season or (_pl(h)["season"] if h else None)
     scene_ids = sorted(
         {o["scene_id"] for o in (comp["obs"] if comp else [])}
         | {s for e in evs for s in e["source_scene_ids"]}
@@ -204,9 +222,10 @@ def _site(rank: int, site: Site, prov: dict) -> dict:
         "aoi": head.cand.aoi,
         "score": head.score,
         "parts": head.parts,
-        "season": _pl(h)["season"] if h else None,
+        "season": season,
+        "matched_season": _pl(h)["season"] if h else None,
         "q_mean": head.cand.q if h else None,
-        "chip_url": f"/chips/{head.cand.tile_id}/{_pl(h)['season']}.png" if h else None,
+        "chip_url": f"/chips/{head.cand.tile_id}/{season}.png" if season else None,
         "geometry": json.loads(head.cand.payload["geom"]),
         "member_tiles": [m.cand.tile_id for m in site.members],
         "dist_m": head.cand.dist_m,

@@ -16,7 +16,18 @@ export type EventRow = {
 };
 type Timeline = { dates: string[]; [index: string]: (number | null)[] | string[] };
 type Check = { agrees: boolean | null } | undefined;
-type Full = EventRow & { evidence?: { timeline?: Timeline; landsat?: Check; s1?: Check } };
+type Obs = { acq_date: string; scene_id: string; source: string; q: number } | null;
+type Img = { season: string; start_date: string; end_date: string; n_obs: number; dates: string[]; scene_ids: string[]; chip_url: string } | null;
+type Hist = { ts: string; actor: string; action: string; payload: Record<string, unknown> };
+export type FullEvent = EventRow & {
+  evidence?: { timeline?: Timeline; landsat?: Check; s1?: Check };
+  location?: { lat: number; lon: number };
+  area_ha?: number;
+  sensors?: string[];
+  observations?: { last_normal: Obs; first_changed: Obs };
+  images?: { before: Img; after: Img };
+  history?: Hist[];
+};
 
 const COLOURS: Record<string, [string, string]> = {
   ndvi: ["#2e9e44", "vegetation"], ndbi: ["#d9534f", "built-up"], mndwi: ["#3a7bd5", "water"], bsi: ["#b07d2b", "bare soil"],
@@ -30,7 +41,32 @@ const TYPE_TEXT: Record<string, string> = {
 const DIRECTION_TEXT: Record<string, string> = {
   appearance: "appeared", disappearance: "disappeared", expansion: "expanded", contraction: "shrank",
 };
+export const SENSOR_TEXT: Record<string, string> = {
+  sentinel2: "Sentinel-2 (optical, 10 m)", sentinel1: "Sentinel-1 (radar)", landsat: "Landsat 8/9 (optical, 30 m)",
+};
+const ACTION_TEXT: Record<string, string> = {
+  "change.run": "Change detection run over the area",
+  "change.sar_evidence": "Sentinel-1 radar cross-check",
+  "change.landsat_evidence": "Landsat cross-check",
+  "change.calibrate": "Confidence calibration",
+  "feedback.confirm": "Analyst confirmed",
+  "feedback.reject": "Analyst rejected",
+  export: "Exported in a signed package",
+};
 export const typeLabel = (t: string) => TYPE_TEXT[t] ?? t;
+
+/** Confidence in words. The calibrated number is not shown as a probability: on our blind held-out set, events
+ * above the operating threshold were real 61% of the time, so "95% likely real" would overstate it. */
+export function confBand(c: number): { text: string; cls: string } {
+  if (c >= 0.85) return { text: "High confidence", cls: "hi" };
+  if (c >= 0.55) return { text: "Medium confidence", cls: "mid" }; // 0.55 = events.OPERATING_CONF (shown by default)
+  return { text: "Low confidence (normally hidden)", cls: "lo" };
+}
+export function ConfTag({ c }: { c: number }) {
+  const b = confBand(c);
+  return <span className={`conf ${b.cls}`} title={`calibrated score ${c.toFixed(2)}`}>{b.text}</span>;
+}
+
 const SEASON: Record<number, string> = { 12: "DJF", 1: "DJF", 2: "DJF", 3: "MAM", 4: "MAM", 5: "MAM", 6: "JJAS", 7: "JJAS", 8: "JJAS", 9: "JJAS", 10: "ON", 11: "ON" };
 const SEASON_TEXT: Record<string, string> = { DJF: "winter", MAM: "summer", JJAS: "monsoon", ON: "post-monsoon" };
 
@@ -73,17 +109,87 @@ function TimelineSvg({ tl, ev }: { tl: Timeline; ev: EventRow }) {
 }
 
 function checkText(c: Check, name: string) {
-  if (!c || c.agrees === null || c.agrees === undefined) return <span className="muted">{name}: no clear view</span>;
+  if (!c || c.agrees === null || c.agrees === undefined) return <span className="muted">{name}: no clear view, no verdict</span>;
   return c.agrees ? <span className="ok">{name}: agrees ✓</span> : <span className="bad">{name}: does not agree</span>;
+}
+
+function ImageFig({ img, label }: { img: Img; label: string }) {
+  if (!img) return <figure><div className="nochip big" /><figcaption>{label}: no clear image</figcaption></figure>;
+  const span = img.dates.length ? `${img.dates[0]} … ${img.dates[img.dates.length - 1]}` : `${img.start_date} … ${img.end_date}`;
+  return (
+    <figure>
+      <img src={`${img.chip_url}?size=160`} alt={label} onError={(e) => ((e.target as HTMLImageElement).style.visibility = "hidden")} />
+      <figcaption><b>{label}</b>: {seasonLabel(img.season)}<br />{img.n_obs} Sentinel-2 image{img.n_obs === 1 ? "" : "s"}, {span}</figcaption>
+    </figure>
+  );
+}
+
+function ObsLine({ o, label, date }: { o: Obs; label: string; date: string | null }) {
+  if (!date) return <p><b>{label}:</b> —</p>;
+  return (
+    <p><b>{label}:</b> {date} · {o ? SENSOR_TEXT[o.source] ?? o.source : "Sentinel-2"}{o && <> · quality {o.q}<br /><span className="mono">{o.scene_id}</span></>}</p>
+  );
+}
+
+/** Everything PS 2.2.5 asks for next to one candidate: before/after, location, acquisition time, sensor/source,
+ * confidence and processing history. Shared by the review queue and the search-result details. */
+export function EvidencePanel({ ev }: { ev: FullEvent }) {
+  return (
+    <>
+      <h2><i className="dot" style={{ background: TYPE_COLOUR[ev.change_type] }} />{typeLabel(ev.change_type)}{ev.direction ? ` ${DIRECTION_TEXT[ev.direction] ?? ev.direction}` : ""}</h2>
+      <p className="big-line"><ConfTag c={ev.confidence} /> · first seen <b>{ev.earliest_supported_date}</b></p>
+      <div className="pair">
+        <ImageFig img={ev.images?.before ?? null} label="Before" />
+        <ImageFig img={ev.images?.after ?? null} label="After" />
+      </div>
+      <h3>Where</h3>
+      <p>
+        {ev.location ? <>{ev.location.lat.toFixed(5)}° N, {ev.location.lon.toFixed(5)}° E</> : "—"}
+        {ev.area_ha !== undefined && <> · changed area {ev.area_ha < 1 ? ev.area_ha.toFixed(2) : ev.area_ha.toFixed(1)} ha</>} · {ev.aoi}
+      </p>
+      <h3>When (actual satellite observations)</h3>
+      <ObsLine o={ev.observations?.last_normal ?? null} label="Last normal observation" date={ev.last_normal_date} />
+      <ObsLine o={ev.observations?.first_changed ?? null} label="First observation showing the change" date={ev.earliest_supported_date} />
+      <h3>Sensors and cross-checks</h3>
+      <p>Supported by: {(ev.sensors ?? []).map((s) => SENSOR_TEXT[s] ?? s).join(", ") || "—"}</p>
+      <p className="checks">{checkText(ev.evidence?.landsat, "Landsat (2nd optical satellite)")}<br />{checkText(ev.evidence?.s1, "Sentinel-1 radar (sees through cloud)")}</p>
+      {ev.evidence?.timeline && <>
+        <h3>What the satellite measured over time</h3>
+        <TimelineSvg tl={ev.evidence.timeline} ev={ev} />
+        <p className="legend-inline">
+          {Object.values(COLOURS).map(([c, n]) => <span key={n}><i className="sw" style={{ background: c }} />{n}</span>)}
+          <span><i className="sw dash" style={{ borderColor: "#aaa" }} />last normal</span>
+          <span><i className="sw dash" style={{ borderColor: "#ff3b30" }} />change first seen</span>
+        </p>
+      </>}
+      <details>
+        <summary>Processing history ({ev.history?.length ?? 0} steps) and source scenes</summary>
+        <ol className="hist">
+          {(ev.history ?? []).map((h, i) => (
+            <li key={i}><span className="muted">{h.ts.replace("T", " ").slice(0, 16)} UTC</span> · {ACTION_TEXT[h.action] ?? h.action}
+              {typeof h.payload.version === "string" && <span className="muted"> ({h.payload.version})</span>}
+              {typeof h.payload.reason === "string" && h.payload.reason && <span className="muted"> “{h.payload.reason}”</span>}
+            </li>
+          ))}
+        </ol>
+        <p>Detection version {ev.provenance.cascade_version} · models {Object.entries(ev.provenance.model_versions ?? {}).map(([k, v]) => `${k}=${v}`).join(", ") || "—"}</p>
+        <p>{ev.provenance.scene_ids.length} source scenes:</p>
+        <p className="mono">{ev.provenance.scene_ids.join(", ")}</p>
+        <p className="muted">Every step above is in the tamper-evident audit log. Event {ev.event_id}.</p>
+      </details>
+    </>
+  );
 }
 
 export default function Review({ onShow }: { onShow: (ev: EventRow | null) => void }) {
   const [aoi, setAoi] = useState("");
   const [type, setType] = useState("");
+  const [t1, setT1] = useState("");
+  const [t2, setT2] = useState("");
   const [showHidden, setShowHidden] = useState(false);
   const [rows, setRows] = useState<EventRow[]>([]);
   const [total, setTotal] = useState(0);
-  const [sel, setSel] = useState<Full | null>(null);
+  const [sel, setSel] = useState<FullEvent | null>(null);
   const [reason, setReason] = useState("");
   const [msg, setMsg] = useState("");
 
@@ -92,13 +198,15 @@ export default function Review({ onShow }: { onShow: (ev: EventRow | null) => vo
     if (showHidden) q.set("min_conf", "0"); // default: the API's operating threshold (low-confidence events stay hidden)
     if (aoi) q.set("aoi", aoi);
     if (type) q.set("type", type);
+    if (t1) q.set("t1", t1);
+    if (t2) q.set("t2", t2);
     const r = await fetch(`/change?${q}`);
     const d = await r.json();
     const open = (d.events as EventRow[]).filter((e) => e.analyst_status === "unreviewed");
     setTotal(open.length);
     setRows(open.slice(0, 200));
   }
-  useEffect(() => { load(); }, [aoi, type, showHidden]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, [aoi, type, t1, t2, showHidden]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function open(ev: EventRow) {
     const r = await fetch(`/events/${ev.event_id}`);
@@ -127,7 +235,7 @@ export default function Review({ onShow }: { onShow: (ev: EventRow | null) => vo
 
   return (
     <div className="review">
-      <p className="sub">Changes found automatically in the archive, most likely first. Open one, check the evidence, then confirm or reject it.</p>
+      <p className="sub">Changes found automatically in the archive, most confident first. Choose an area and time window, open a change, check the evidence, then confirm or reject it.</p>
       <div className="row">
         <select value={aoi} onChange={(e) => setAoi(e.target.value)} aria-label="Area of interest">
           {["", "dholera", "hasdeo", "navimumbai"].map((a) => <option key={a} value={a}>{a ? `Area: ${a}` : "All areas"}</option>)}
@@ -137,32 +245,16 @@ export default function Review({ onShow }: { onShow: (ev: EventRow | null) => vo
           {Object.keys(TYPE_TEXT).map((t) => <option key={t} value={t}>{typeLabel(t)}</option>)}
         </select>
       </div>
+      <div className="row dates">
+        <label>Changed from <input type="date" value={t1} onChange={(e) => setT1(e.target.value)} /></label>
+        <label>to <input type="date" value={t2} onChange={(e) => setT2(e.target.value)} /></label>
+      </div>
       <label className="check"><input type="checkbox" checked={showHidden} onChange={(e) => setShowHidden(e.target.checked)} /> Also show low-confidence changes (normally hidden)</label>
       <p className="status">{total} changes to review{total > rows.length ? ` (showing the top ${rows.length})` : ""}</p>
 
       {sel && (
         <section className="detail">
-          <h2><i className="dot" style={{ background: TYPE_COLOUR[sel.change_type] }} />{typeLabel(sel.change_type)}{sel.direction ? ` ${DIRECTION_TEXT[sel.direction] ?? sel.direction}` : ""}</h2>
-          <p className="big-line"><b>{Math.round(sel.confidence * 100)}%</b> likely real · first seen <b>{sel.earliest_supported_date}</b> · {sel.aoi}</p>
-          <div className="pair">
-            {sel.last_normal_date && <figure><img src={`/chips/${sel.tile_id}/${seasonOf(sel.last_normal_date)}.png?size=160`} alt="before" onError={(e) => ((e.target as HTMLImageElement).style.visibility = "hidden")} /><figcaption>Before: {seasonLabel(seasonOf(sel.last_normal_date))}</figcaption></figure>}
-            {sel.last_normal_date && (() => {
-              const after = seasonOf(sel.last_normal_date, 1 + new Date(sel.earliest_supported_date).getUTCFullYear() - new Date(sel.last_normal_date).getUTCFullYear());
-              return <figure><img src={`/chips/${sel.tile_id}/${after}.png?size=160`} alt="after" onError={(e) => ((e.target as HTMLImageElement).style.visibility = "hidden")} /><figcaption>After: {seasonLabel(after)}</figcaption></figure>;
-            })()}
-          </div>
-          <h3>Independent cross-checks</h3>
-          <p className="checks">{checkText(sel.evidence?.landsat, "Landsat (2nd optical satellite)")}<br />{checkText(sel.evidence?.s1, "Sentinel-1 radar (sees through cloud)")}</p>
-          {sel.evidence?.timeline && <>
-            <h3>What the satellite measured over time</h3>
-            <TimelineSvg tl={sel.evidence.timeline} ev={sel} />
-            <p className="legend-inline">
-              {Object.values(COLOURS).map(([c, n]) => <span key={n}><i className="sw" style={{ background: c }} />{n}</span>)}
-              <span><i className="sw dash" style={{ borderColor: "#aaa" }} />last normal ({sel.last_normal_date ?? "—"})</span>
-              <span><i className="sw dash" style={{ borderColor: "#ff3b30" }} />change first seen</span>
-            </p>
-          </>}
-          <p className="muted">Based on {sel.provenance.scene_ids.length} satellite scenes · {sel.event_id} · detection version {sel.provenance.cascade_version}</p>
+          <EvidencePanel ev={sel} />
           <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason (optional), e.g. seasonal flooding, crop harvest" aria-label="Reason" />
           <div className="row">
             <button className="primary" onClick={() => decide("confirm")}>✓ Real change</button>
@@ -177,9 +269,7 @@ export default function Review({ onShow }: { onShow: (ev: EventRow | null) => vo
           <li key={e.event_id} className={sel?.event_id === e.event_id ? "sel" : ""} onClick={() => open(e)}>
             <div className="body">
               <div className="line"><i className="dot" style={{ background: TYPE_COLOUR[e.change_type] }} /><b>{typeLabel(e.change_type)}</b> · {e.aoi}</div>
-              <div className="line meta">
-                <span className="bar"><span style={{ width: `${e.confidence * 100}%` }} /></span> {Math.round(e.confidence * 100)}% likely real · first seen {e.earliest_supported_date}
-              </div>
+              <div className="line meta"><ConfTag c={e.confidence} /> · first seen {e.earliest_supported_date}</div>
             </div>
           </li>
         ))}

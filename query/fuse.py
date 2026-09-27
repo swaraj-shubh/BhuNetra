@@ -40,8 +40,8 @@ def fuse(cands: list[Candidate], near: dict[str, float], w: Fusion) -> list[Scor
     kept = []
     for c in cands:
         sp = min((spatial_fit(c.dist_m.get(t, float("inf")), d) for t, d in near.items()), default=0.0)
-        if near and sp == 0.0:
-            continue  # precision first (§2.11): a spatial constraint the site cannot meet removes it
+        if near and sp < 1.0:
+            continue  # precision first (§2.11): "near X" is a hard limit; outside it the site is removed
         kept.append((c, sp))
     sims = [c.sim for c, _ in kept if c.sim is not None]  # normalise over survivors only
     lo, hi = (min(sims), max(sims)) if sims else (0.0, 0.0)
