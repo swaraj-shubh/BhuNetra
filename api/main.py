@@ -517,13 +517,11 @@ def _export_key():
 
 @app.post("/export")
 def export(req: ExportRequest, user: dict = ANALYST) -> Response:
-    """Ed25519-signed zip: events.geojson (+ sites.geojson for a query) + provenance + manifest (DESIGN.md §3)."""
+    """Ed25519-signed zip: events.geojson (+ sites.geojson for a query) [+ export.gpkg] + provenance + manifest (§3)."""
     import zipfile
 
     from governance import audit, sign
 
-    if req.format == "gpkg":
-        raise HTTPException(422, "gpkg not implemented yet (no GDAL vector driver in the image); use geojson")
     if not (req.event_ids or req.query_id):
         raise HTTPException(422, "give event_ids or query_id")
     files: dict[str, bytes] = {}
@@ -569,6 +567,12 @@ def export(req: ExportRequest, user: dict = ANALYST) -> Response:
             ],
         }
     ).encode()
+    if req.format == "gpkg":  # same features as the GeoJSON, one layer each, inside the same signed package
+        from api import gpkg
+
+        files["export.gpkg"] = gpkg.write(
+            {name[: -len(".geojson")]: json.loads(files[name])["features"] for name in sorted(files)}
+        )
     files["provenance.json"] = json.dumps(
         {e["event_id"]: {"provenance": e["provenance"], "evidence": e["evidence"]} for e in evs}
     ).encode()

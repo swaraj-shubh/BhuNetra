@@ -271,7 +271,7 @@ GET  /audit/verify                                               -> {ok, broken_
 GET  /stats                                                      -> area, scenes, tiles, storage, latency
 ```
 Every `site` and `event` in a response includes `provenance: {scene_ids, model_versions, cascade_version}`.
-Implemented so far: `GET /stats`, `POST /search/text` (parser + fusion, returns `query_id`), `GET /change`, `GET /events/{id}`, `POST /feedback` (Rocchio), `POST /export` (Ed25519-signed zip, geojson; gpkg = 422 for now), `GET /audit/verify`; extras `POST /export/verify`, `GET /chips/{tile_id}/{season}.png`, `/label*` (M5 labelling). **Auth (M8):** `X-API-Key` → `governance/rbac.py` roles viewer < analyst < admin, enforced when `data/keys/users.yaml` exists (`python -m governance.rbac add <name> <role>`); chips stay unauthenticated (loaded by `<img>`).
+Implemented so far: `GET /stats`, `POST /search/text` (parser + fusion, returns `query_id`), `GET /change`, `GET /events/{id}`, `POST /feedback` (Rocchio), `POST /export` (Ed25519-signed zip: geojson, `format: gpkg` adds `export.gpkg` via a stdlib GeoPackage writer `api/gpkg.py`), `GET /audit/verify`; extras `POST /export/verify`, `GET /chips/{tile_id}/{season}.png`, `/label*` (M5 labelling). **Auth (M8):** `X-API-Key` → `governance/rbac.py` roles viewer < analyst < admin, enforced when `data/keys/users.yaml` exists (`python -m governance.rbac add <name> <role>`); chips stay unauthenticated (loaded by `<img>`).
 
 ---
 
