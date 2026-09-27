@@ -120,6 +120,36 @@ def load_generic(folder: Path) -> Observation:
     )
 
 
+def load_landsat(folder: Path) -> Observation:
+    """STAC-staged Landsat 8/9 C2 L2 (30 m, QA_PIXEL mask). Evidence only for now (M9): not in the S2 series."""
+    meta = read_meta(folder)
+    cfg = bands["landsat"]
+    refl: dict[str, np.ndarray] = {}
+    transform = epsg = None
+    for canon, name in cfg["bands"].items():
+        b = meta["bands"][name]
+        dn, transform, epsg = _read(folder, b, transform)
+        refl[canon] = to_reflectance(dn, b["scale"], b["offset"], b.get("nodata"))
+    qa, _, _ = _read(folder, meta["bands"][cfg["mask_bands"]["qa_pixel"]], transform)
+    present = np.logical_and.reduce([~np.isnan(v) for v in refl.values()])
+    return Observation(
+        scene_id="+".join(meta["source_items"]),
+        source="landsat",
+        aoi=meta["aoi"],
+        date=meta["date"],
+        folder=folder,
+        meta=meta,
+        epsg=epsg,
+        transform=transform,
+        refl=refl,
+        valid=present & masks.landsat_valid_mask(qa),
+        cloud=masks.landsat_cloud_mask(qa),
+    )
+
+
 def load(folder: Path) -> Observation:
-    """Any staged scene: STAC-staged Sentinel-2 (SCL/CLD masks) or local/organiser files (generic)."""
-    return load_generic(folder) if "canonical" in read_meta(folder) else load_s2(folder)
+    """Any staged scene: Sentinel-2 (SCL/CLD), Landsat (QA_PIXEL) or local/organiser files (generic)."""
+    meta = read_meta(folder)
+    if "canonical" in meta:
+        return load_generic(folder)
+    return load_landsat(folder) if meta.get("sensor") == "landsat" else load_s2(folder)

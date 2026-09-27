@@ -26,6 +26,20 @@ def s2_cloud_mask(scl: np.ndarray, cld: np.ndarray | None = None) -> np.ndarray:
     return dilate(cloudy, T.quality.CLOUD_DILATE_PX)
 
 
+def _bits(qa: np.ndarray, bits: list[int]) -> np.ndarray:
+    return (qa.astype(np.uint16) & np.uint16(sum(1 << b for b in bits))) != 0
+
+
+def landsat_cloud_mask(qa: np.ndarray) -> np.ndarray:
+    """True on (dilated) cloud, cirrus or shadow from QA_PIXEL; USGS already dilates the cloud bit."""
+    return _bits(qa, bands["landsat"]["qa_cloud_bits"])
+
+
+def landsat_valid_mask(qa: np.ndarray) -> np.ndarray:
+    """True where usable: not fill, cloud, cirrus, shadow or snow."""
+    return ~_bits(qa, bands["landsat"]["qa_invalid_bits"])
+
+
 def s2_valid_mask(scl: np.ndarray, cld: np.ndarray | None = None) -> np.ndarray:
     """True where usable: SCL not invalid and not (dilated) cloud."""
     return ~(np.isin(scl, bands["scl"]["invalid"]) | s2_cloud_mask(scl, cld))

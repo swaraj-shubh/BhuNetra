@@ -91,6 +91,14 @@ class Fusion(_Strict):  # DESIGN.md §7 fusion score
     w_sp: float
 
 
+class Landsat(_Strict):
+    WINDOW_DAYS: (
+        int  # year before last_normal_date vs year after earliest_supported_date (seasons average out)
+    )
+    MIN_OBS: int  # clear Landsat dates needed on each side
+    MIN_VALID_FRAC: float  # share of the footprint's pixels valid for a date to count
+
+
 class Sar(_Strict):
     MIN_DB: float  # |log-ratio| for construction (VV up) / clearance (VH down) agreement
     WATER_MIN_DB: float  # |VV log-ratio| for water appearance/disappearance agreement
@@ -113,6 +121,7 @@ class Thresholds(_Strict):
     composites: Composites
     context: Context
     sar: Sar
+    landsat: Landsat
 
 
 class AOI(_Strict):

@@ -8,7 +8,7 @@ OFFLINE := $(COMPOSE) -f docker/compose.offline.yaml
 -include docker/.env
 HOST_ENV := DATABASE_URL=postgresql://$(or $(POSTGRES_USER),sih):$(POSTGRES_PASSWORD)@127.0.0.1:5432/$(or $(POSTGRES_DB),sih)             QDRANT_URL=http://127.0.0.1:6333
 
-.PHONY: up build change stage-local down up-offline offline-check test lint db-migrate stage ingest ingest-scene reconcile embed-eo sar build-index \
+.PHONY: up build change stage-local down up-offline offline-check test lint db-migrate stage ingest ingest-scene reconcile embed-eo sar landsat build-index \
         audit-verify bench-clip eval report verify-weights stats
 
 up:                    ## start (no rebuild: exporting the CUDA image takes ~10 min even when cached)
@@ -66,8 +66,11 @@ embed-eo:              ## make embed-eo AOI=<name>   (M7: Prithvi eo_vec per sea
 sar:                   ## make sar AOI=<name>   (M9: Sentinel-1 log-ratio evidence on stored events)
 	@$(HOST_ENV) $(RUN) python -m worker.sar_evidence $(AOI)
 
+landsat:               ## make landsat AOI=<name>   (M9: Landsat 8/9 cross-sensor evidence on stored events)
+	@$(HOST_ENV) $(RUN) python -m worker.landsat_evidence $(AOI)
+
 build-index:           ## full index build for AOI (empty = all): ingest -> change -> eo_vec -> S1 evidence
-	$(MAKE) ingest AOI=$(AOI) && $(MAKE) change AOI=$(AOI) && $(MAKE) embed-eo AOI=$(AOI) && $(MAKE) sar AOI=$(AOI)
+	$(MAKE) ingest AOI=$(AOI) && $(MAKE) change AOI=$(AOI) && $(MAKE) embed-eo AOI=$(AOI) && $(MAKE) sar AOI=$(AOI) && $(MAKE) landsat AOI=$(AOI)
 
 reconcile:             ## rebuild Qdrant from PostGIS (M2)
 	@$(HOST_ENV) $(RUN) python -m index.reconcile

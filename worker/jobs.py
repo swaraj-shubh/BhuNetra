@@ -21,7 +21,7 @@ from configs.settings import aois, paths
 from features import composites
 from index import db
 from ingest import local, scene
-from worker import change, ingest, sar_evidence
+from worker import change, ingest, landsat_evidence, sar_evidence
 
 log = logging.getLogger("worker.jobs")
 POLL_S = 3
@@ -70,8 +70,10 @@ def ingest_one(path: str, aoi: str, progress=lambda t: None) -> dict:
     progress(timings)
     ch = change.run(aoi)
     timings["change_s"] = round(time.perf_counter() - t0, 1)
-    s1 = sar_evidence.run(aoi)  # change.run rewrites evidence -> re-attach S1 (M9)
+    s1 = sar_evidence.run(aoi)  # change.run rewrites evidence -> re-attach S1 and Landsat (M9)
     timings["s1_s"] = round(time.perf_counter() - t0, 1)
+    ls = landsat_evidence.run(aoi)
+    timings["landsat_s"] = round(time.perf_counter() - t0, 1)
     return {
         "folder": str(folder.relative_to(paths.root)),
         "scene": status,
@@ -80,6 +82,7 @@ def ingest_one(path: str, aoi: str, progress=lambda t: None) -> dict:
         "eo_vec": eo,
         "change": ch,
         "s1": s1,
+        "landsat": ls,
         "timings": timings,
     }
 
