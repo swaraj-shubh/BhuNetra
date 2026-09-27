@@ -66,6 +66,14 @@ export default function App() {
     m.on("load", () => {
       m.addSource("sites", { type: "geojson", data: EMPTY });
       m.addSource("event", { type: "geojson", data: EMPTY });
+      m.addSource("clusters", { type: "geojson", data: EMPTY });
+      m.addLayer({
+        id: "clusters-fill", type: "fill", source: "clusters",
+        paint: {
+          "fill-color": ["match", ["%", ["get", "cluster"], 6], 0, "#e6194b", 1, "#3cb44b", 2, "#4363d8", 3, "#f58231", 4, "#911eb4", "#42d4f4"],
+          "fill-opacity": 0.45,
+        },
+      });
       m.addLayer({ id: "event-fill", type: "fill", source: "event", paint: { "fill-color": "#ff3b30", "fill-opacity": 0.35 } });
       m.addLayer({ id: "event-line", type: "line", source: "event", paint: { "line-color": "#ff3b30", "line-width": 2 } });
       m.addLayer({ id: "sites-line", type: "line", source: "sites", paint: { "line-color": "#f5b400", "line-width": 2 } });
@@ -158,6 +166,29 @@ export default function App() {
     }
   }
 
+  async function similar(tile: string) {
+    setStatus(`finding look-alikes of ${tile} (Prithvi eo_vec)…`);
+    const r = await fetch("/search/image", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tile_id: tile, k: 20 }) });
+    if (!r.ok) return setStatus(`error ${r.status}: ${await r.text()}`);
+    const body = await r.json();
+    setSites(body.sites);
+    setQueryId(null);
+    setParsed(null);
+    setStatus(`${body.sites.length} sites that look like ${tile} (${body.seed.season})`);
+  }
+
+  async function clusters(tile: string) {
+    setStatus(`grouping look-alikes of ${tile} (UMAP + HDBSCAN)…`);
+    const r = await fetch("/discover/cluster", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ seed_tile_id: tile }) });
+    if (!r.ok) return setStatus(`error ${r.status}: ${await r.text()}`);
+    const body = await r.json();
+    const feats = body.clusters.flatMap((c: { cluster: number; members: { tile_id: string; geometry: GeoJSON.Polygon }[] }) =>
+      c.members.map((m) => ({ type: "Feature", geometry: m.geometry, properties: { cluster: c.cluster, tile_id: m.tile_id } })));
+    (map.current?.getSource("clusters") as GeoJSONSource | undefined)?.setData({ type: "FeatureCollection", features: feats });
+    const sizes = body.clusters.map((c: { size: number; contains_seed: boolean }) => `${c.size}${c.contains_seed ? "*" : ""}`).join(", ");
+    setStatus(`${body.clusters.length} look-alike groups among ${body.n_points} sites (sizes ${sizes}; * = contains ${tile}); ${body.noise.length} unassigned`);
+  }
+
   async function siteFeedback(tile: string, decision: "confirm" | "reject") {
     if (!queryId) return;
     setStatus(`${decision}ing ${tile}…`);
@@ -239,6 +270,10 @@ export default function App() {
                   </>
                 )}
                 {"water" in s.dist_m && <> · water {Math.round(s.dist_m.water)} m</>}
+                <span className="fb" onClick={(e) => e.stopPropagation()}>
+                  <button title="Find sites that look like this (image search)" onClick={() => similar(s.tile_id)}>Similar</button>
+                  <button title="Group look-alike sites" onClick={() => clusters(s.tile_id)}>Clusters</button>
+                </span>
                 {queryId && (
                   <span className="fb" onClick={(e) => e.stopPropagation()}>
                     <button title="Relevant" className={fb[s.tile_id] === "confirm" ? "on" : ""} onClick={() => siteFeedback(s.tile_id, "confirm")}>✓</button>

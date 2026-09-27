@@ -333,6 +333,107 @@ def _grid(aoi: str) -> tuple[tuple[float, float, float, float], int]:
 # Workbench (web/, built into dist/ by docker/Dockerfile.api). Mounted last so API routes win.
 
 
+class ImageQuery(BaseModel):
+    tile_id: str | None = None  # a site already in the archive (its stored eo_vec)
+    season: str | None = None  # which season of that tile; default: its latest with an eo_vec
+    chip: str | None = None  # 6-band chip upload: not implemented (needs blue..swir2, not RGB)
+    aoi: str | None = None
+    date_range: tuple[str | None, str | None] | None = None
+    k: int = Field(default=T.retrieval.TOP_K_SITES, ge=1, le=200)
+
+
+@app.post("/search/image")
+def search_image(q: ImageQuery, user: dict = VIEWER) -> dict:
+    """Image -> image via eo_vec (Prithvi), never text_vec (DESIGN.md §2.3). The seed site itself is excluded."""
+    import numpy as np
+
+    from query import retrieve
+
+    if q.chip is not None or not q.tile_id:
+        raise HTTPException(422, "give tile_id (6-band chip upload is not implemented yet)")
+    t0 = time.perf_counter()
+    with db.engine().connect() as conn:
+        seed = retrieve.eo_vector(conn, q.tile_id, q.season)
+    if seed is None:
+        raise HTTPException(404, f"no eo_vec for {q.tile_id} (run make embed-eo)")
+    vec, season = seed
+    sites = retrieve.search_image(
+        np.asarray(vec, np.float32), q.aoi, q.date_range, q.k, frozenset({q.tile_id})
+    )
+    LATENCY_MS["search_image"] = round((time.perf_counter() - t0) * 1000, 1)
+    return {"seed": {"tile_id": q.tile_id, "season": season}, "sites": sites}
+
+
+class ClusterRequest(BaseModel):
+    seed_tile_id: str | None = None
+    aoi: str | None = None
+    season: str | None = None
+    n: int = Field(default=T.retrieval.TOP_N, ge=20, le=5000)  # seed mode: how many look-alikes to group
+
+
+@app.post("/discover/cluster")
+def discover_cluster(r: ClusterRequest, user: dict = VIEWER) -> dict:
+    """Look-alike groups (HDBSCAN on UMAP of centred eo_vec). Seed: its n nearest sites; AOI: one season, all tiles."""
+    import numpy as np
+
+    from query import cluster, retrieve
+
+    t0 = time.perf_counter()
+    with db.engine().connect() as conn:
+        if r.seed_tile_id:
+            seed = retrieve.eo_vector(conn, r.seed_tile_id, r.season)
+            if seed is None:
+                raise HTTPException(404, f"no eo_vec for {r.seed_tile_id}")
+            hits = retrieve.semantic(np.asarray(seed[0], np.float32), r.aoi, None, using="eo_vec")
+            keys = [(h.payload or {})["tile_id"] for h in list(hits.values())[: r.n]]
+            rows = conn.execute(
+                text(
+                    "SELECT DISTINCT ON (c.tile_id) c.tile_id, c.season, c.eo_vec, ST_AsGeoJSON(t.geom) FROM composites c "
+                    "JOIN tiles t USING (tile_id) WHERE c.tile_id = ANY(:t) AND c.eo_vec IS NOT NULL "
+                    "ORDER BY c.tile_id, c.end_date DESC"
+                ),
+                {"t": keys + [r.seed_tile_id]},
+            ).all()
+        elif r.aoi and r.season:
+            rows = conn.execute(
+                text(
+                    "SELECT c.tile_id, c.season, c.eo_vec, ST_AsGeoJSON(t.geom) FROM composites c JOIN tiles t "
+                    "USING (tile_id) WHERE t.aoi = :a AND c.season = :s AND c.eo_vec IS NOT NULL"
+                ),
+                {"a": r.aoi, "s": r.season},
+            ).all()
+        else:
+            raise HTTPException(422, "give seed_tile_id, or aoi + season")
+    if len(rows) < 3:
+        return {"clusters": [], "noise": [row[0] for row in rows]}
+    vecs = np.asarray([row[2] for row in rows], np.float32)
+    labels = cluster.cluster(vecs, T.cluster.MIN_CLUSTER_SIZE, T.cluster.UMAP_DIM)
+    out = []
+    for lab in sorted(set(labels) - {-1}):
+        idx = np.flatnonzero(labels == lab)
+        centre = vecs[idx].mean(0)
+        medoid = int(idx[np.argmax(vecs[idx] @ centre)])
+        out.append(
+            {
+                "cluster": int(lab),
+                "size": len(idx),
+                "medoid_tile": rows[medoid][0],
+                "contains_seed": bool(r.seed_tile_id and r.seed_tile_id in {rows[i][0] for i in idx}),
+                "members": [
+                    {"tile_id": rows[i][0], "season": rows[i][1], "geometry": json.loads(rows[i][3])}
+                    for i in idx
+                ],
+            }
+        )
+    out.sort(key=lambda c: (-c["contains_seed"], -c["size"]))
+    LATENCY_MS["discover_cluster"] = round((time.perf_counter() - t0) * 1000, 1)
+    return {
+        "clusters": out,
+        "noise": [rows[i][0] for i in np.flatnonzero(labels == -1)],
+        "n_points": len(rows),
+    }
+
+
 class IngestRequest(BaseModel):
     path: str = Field(
         min_length=1, max_length=500

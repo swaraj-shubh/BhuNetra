@@ -51,10 +51,10 @@ def _best_per_tile(hits) -> dict[str, qm.ScoredPoint]:
     return best
 
 
-def semantic(vec, aoi: str | None, date_range) -> dict[str, qm.ScoredPoint]:
+def semantic(vec, aoi: str | None, date_range, using: str = "text_vec") -> dict[str, qm.ScoredPoint]:
     must: list[Any] = [qm.FieldCondition(key="aoi", match=qm.MatchValue(value=aoi))] if aoi else []
     must += _date_filter(date_range)
-    return _best_per_tile(qdrant.search(vec, "text_vec", T.retrieval.TOP_N, qm.Filter(must=must)))
+    return _best_per_tile(qdrant.search(vec, using, T.retrieval.TOP_N, qm.Filter(must=must)))
 
 
 def semantic_for_tiles(vec, tiles: list[str]) -> dict[str, qm.ScoredPoint]:
@@ -119,27 +119,33 @@ def search(p: Parsed, req: Request, vec=None, exclude_tiles: frozenset[str] = fr
         tiles = [t for t in tiles if t not in exclude_tiles]
         if not tiles:
             return {"sites": [], "warnings": warnings}
-        rows = conn.execute(
+        sites = _assemble(conn, tiles, sem, ev, p.near, req.k)
+    return {"sites": sites, "warnings": warnings}
+
+
+def _assemble(conn, tiles: list[str], sem: dict, ev: dict, near: dict[str, float], k: int) -> list[dict]:
+    """Candidates -> fusion -> unique-site dedup -> response dicts (shared by text and image search)."""
+    rows = conn.execute(
+        text(
+            "SELECT t.tile_id, t.aoi, t.bounds_m, ST_AsGeoJSON(t.geom) AS geom, "
+            "COALESCE(jsonb_object_agg(c.target, c.dist_m) FILTER (WHERE c.target IS NOT NULL), '{}') AS dist "
+            "FROM tiles t LEFT JOIN tile_context c USING (tile_id) WHERE t.tile_id = ANY(:ids) "
+            "GROUP BY t.tile_id, t.aoi, t.bounds_m, t.geom"
+        ),
+        {"ids": tiles},
+    ).mappings()
+    tile_rows = {r["tile_id"]: r for r in rows}
+    comp_ids = [_pl(h)["comp_id"] for h in sem.values()]
+    prov = {
+        r["comp_id"]: r
+        for r in conn.execute(
             text(
-                "SELECT t.tile_id, t.aoi, t.bounds_m, ST_AsGeoJSON(t.geom) AS geom, "
-                "COALESCE(jsonb_object_agg(c.target, c.dist_m) FILTER (WHERE c.target IS NOT NULL), '{}') AS dist "
-                "FROM tiles t LEFT JOIN tile_context c USING (tile_id) WHERE t.tile_id = ANY(:ids) "
-                "GROUP BY t.tile_id, t.aoi, t.bounds_m, t.geom"
+                "SELECT comp_id::text AS comp_id, model_versions, lineage->'observations' AS obs "
+                "FROM composites WHERE comp_id = ANY(CAST(:ids AS uuid[]))"
             ),
-            {"ids": tiles},
+            {"ids": comp_ids},
         ).mappings()
-        tile_rows = {r["tile_id"]: r for r in rows}
-        comp_ids = [_pl(h)["comp_id"] for h in sem.values()]
-        prov = {
-            r["comp_id"]: r
-            for r in conn.execute(
-                text(
-                    "SELECT comp_id::text AS comp_id, model_versions, lineage->'observations' AS obs "
-                    "FROM composites WHERE comp_id = ANY(CAST(:ids AS uuid[]))"
-                ),
-                {"ids": comp_ids},
-            ).mappings()
-        }
+    }
 
     cands = []
     for tid in tiles:
@@ -155,12 +161,12 @@ def search(p: Parsed, req: Request, vec=None, exclude_tiles: frozenset[str] = fr
                 sim=h.score if h else None,
                 event_conf=max((e["confidence"] for e in tile_events), default=0.0),
                 q=float(_pl(h)["q_mean"]) if h else 0.0,
-                dist_m={k: float(v) for k, v in (tr["dist"] or {}).items()},
+                dist_m={tgt: float(v) for tgt, v in (tr["dist"] or {}).items()},
                 payload={"hit": h, "events": tile_events, "geom": tr["geom"]},
             )
         )
-    sites = dedup(fuse(cands, p.near, fusion), T.retrieval.DEDUP_RADIUS_M)[: req.k]
-    return {"sites": [_site(rank, s, prov) for rank, s in enumerate(sites, 1)], "warnings": warnings}
+    sites = dedup(fuse(cands, near, fusion), T.retrieval.DEDUP_RADIUS_M)[:k]
+    return [_site(rank, s, prov) for rank, s in enumerate(sites, 1)]
 
 
 def _site(rank: int, site: Site, prov: dict) -> dict:
@@ -200,3 +206,27 @@ def _site(rank: int, site: Site, prov: dict) -> dict:
             "cascade_version": sorted({e["cascade_version"] for e in evs}) or None,
         },
     }
+
+
+def search_image(
+    vec, aoi: str | None, date_range, k: int, exclude_tiles: frozenset[str] = frozenset()
+) -> list[dict]:
+    """eo_vec similarity (DESIGN.md §2.3: never mixed with text_vec) -> same fusion/dedup as text search."""
+    sem = semantic(vec, aoi, date_range, using="eo_vec")
+    tiles = [t for t in sorted(sem) if t not in exclude_tiles]
+    if not tiles:
+        return []
+    with db.engine().connect() as conn:
+        return _assemble(conn, tiles, sem, {}, {}, k)
+
+
+def eo_vector(conn, tile_id: str, season: str | None) -> tuple[list[float], str] | None:
+    """Stored eo_vec of a tile (given season, else its latest season that has one)."""
+    row = conn.execute(
+        text(
+            "SELECT eo_vec, season FROM composites WHERE tile_id = :t AND eo_vec IS NOT NULL "
+            "AND (CAST(:s AS text) IS NULL OR season = :s) ORDER BY end_date DESC LIMIT 1"
+        ),
+        {"t": tile_id, "s": season},
+    ).first()
+    return (list(row[0]), row[1]) if row else None

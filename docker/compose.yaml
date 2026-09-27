@@ -57,6 +57,10 @@ services:
   worker:   # M9 job queue: incremental ingest; same image as the api, no published ports
     image: sih26227-api
     command: ["python", "-m", "worker.jobs"]
+    deploy:   # Prithvi eo_vec for new seasons runs here (M7); needs nvidia-container-toolkit (on the AWS DL AMI)
+      resources:
+        reservations:
+          devices: [{driver: nvidia, count: 1, capabilities: [gpu]}]
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-sih}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-sih}
       QDRANT_URL: http://qdrant:6333

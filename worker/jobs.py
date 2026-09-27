@@ -63,6 +63,11 @@ def ingest_one(path: str, aoi: str, progress=lambda t: None) -> dict:
     season_status = ingest.ingest_season(aoi, season, same_season, tiles)
     timings["searchable_s"] = round(time.perf_counter() - t0, 1)  # PS metric: incremental ingest time
     progress(timings)
+    from worker import embed_eo  # torch/Prithvi import only when a job needs it
+
+    eo = embed_eo.run(aoi, full_sync=False)  # only the (re)built season lacks this eo_vec version
+    timings["eo_vec_s"] = round(time.perf_counter() - t0, 1)
+    progress(timings)
     ch = change.run(aoi)
     timings["change_s"] = round(time.perf_counter() - t0, 1)
     return {
@@ -70,6 +75,7 @@ def ingest_one(path: str, aoi: str, progress=lambda t: None) -> dict:
         "scene": status,
         "season": season,
         "season_status": season_status,
+        "eo_vec": eo,
         "change": ch,
         "timings": timings,
     }

@@ -116,3 +116,23 @@ def search_best_per_tile(
         .groups
     )
     return [g.hits[0] for g in groups if g.hits]
+
+
+def set_vectors(rows: list[tuple[str, dict]]) -> None:
+    """Add/replace named vectors on existing points (e.g. eo_vec after text_vec). rows: (key, {name: vector})."""
+    # Qdrant's request limit is 32 MB; a 1024-d float vector as JSON is ~20 kB -> batches of 500
+    for i in range(0, len(rows), 500):
+        client().update_vectors(
+            COLLECTION,
+            points=[
+                models.PointVectors(id=point_id(k), vector={n: v.tolist() for n, v in vec.items()})
+                for k, vec in rows[i : i + 500]
+            ],
+        )
+
+
+def set_indexing(on: bool) -> None:
+    """Pause (bulk loads) or resume HNSW indexing; 20000 = Qdrant's default indexing_threshold (kB)."""
+    client().update_collection(
+        COLLECTION, optimizers_config=models.OptimizersConfigDiff(indexing_threshold=20000 if on else 0)
+    )

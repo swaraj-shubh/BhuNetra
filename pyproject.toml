@@ -27,6 +27,9 @@ dependencies = [
     "sqlalchemy>=2.1.1",
     "pg8000>=1.31.5",
     "cryptography>=50.0.1",
+    "einops>=0.8.2",
+    "scikit-learn>=1.9.1",
+    "umap-learn>=0.5.12",
 ]
 
 [dependency-groups]
@@ -76,5 +79,5 @@ extend-exclude = ["models", "data", "web/vendor", ".venv"]
 testpaths = ["tests"]
 
 [[tool.mypy.overrides]]
-module = ["rasterio.*", "shapely.*"]  # no stubs shipped; typed code still checks our side (DESIGN.md §4)
+module = ["rasterio.*", "shapely.*", "sklearn.*", "umap.*"]  # no stubs shipped; typed code still checks our side (DESIGN.md §4)
 ignore_missing_imports = true
