@@ -933,5 +933,15 @@ def audit_verify(user: dict = VIEWER) -> dict:
     return {"ok": broken is None, "entries": len(entries), "broken_at": broken}
 
 
+@app.get("/context/{aoi}/water.geojson")
+def context_water(aoi: str) -> Response:
+    """JRC water polygons (occurrence >= 25%) for map context."""
+    p = paths.data / "context" / f"{aoi}_water.geojson"
+    if not p.exists():
+        raise HTTPException(404, f"No water context for {aoi!r}")
+    return Response(p.read_bytes(), media_type="application/geo+json",
+                    headers={"Cache-Control": "public, max-age=86400"})
+
+
 if (paths.web / "dist").is_dir():
     app.mount("/", StaticFiles(directory=paths.web / "dist", html=True), name="web")
