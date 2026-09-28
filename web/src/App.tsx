@@ -33,6 +33,7 @@ type Parsed = {
   near: Record<string, number>;
   date_range: [string | null, string | null] | null;
   aoi: string | null;
+  landcover?: string[];
 };
 type Mode = { kind: "text"; query: string } | { kind: "similar"; seed: Site; season: string } | null;
 type Group = { cluster: number; size: number; contains_seed: boolean };
@@ -314,6 +315,7 @@ export default function App() {
     ...Object.entries(parsed.near).map(([t, m]) => `Within ${m / 1000} km of ${t === "water" ? "water (river, lake, reservoir, creek or salt pan: not told apart)" : t}`),
     parsed.date_range ? `Dates ${parsed.date_range[0] ?? "…"} → ${parsed.date_range[1] ?? "…"}` : null,
     parsed.aoi ? `Area: ${parsed.aoi}` : null,
+    parsed.landcover?.length ? `Land cover: ${parsed.landcover.join(" / ")} (independent annual map)` : null,
     `Appearance: “${parsed.semantic}”`,
   ].filter(Boolean) as string[] : [];
 
@@ -435,6 +437,7 @@ export default function App() {
                   <tr><td>Confidence of a detected change</td><td><Bar v={sel.parts.event_conf ?? 0} /></td></tr>
                   <tr><td>Image quality (cloud-free)</td><td><Bar v={sel.parts.q ?? 0} /></td></tr>
                   <tr><td>Fits the place you asked for</td><td><Bar v={sel.parts.spatial_fit ?? 0} /></td></tr>
+                {(sel.parts.landcover ?? 0) > 0 && <tr><td>Share of that land cover (independent map)</td><td><Bar v={sel.parts.landcover} /></td></tr>}
                 </tbody></table>
                 {sel.events.length > 1 && <h3>All changes at this place</h3>}
                 {sel.events.length > 1 && sel.events.map((e) => (

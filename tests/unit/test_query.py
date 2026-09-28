@@ -146,7 +146,7 @@ def test_spatial_fit_full_then_linear_decay():
     assert spatial_fit(2500, 1000) == 0.0
 
 
-W = Fusion(w_sim=0.5, w_conf=0.2, w_q=0.1, w_sp=0.2)
+W = Fusion(w_sim=0.5, w_conf=0.2, w_q=0.1, w_sp=0.2, w_lc=0.25)
 
 
 def _c(tid, sim, conf=0.0, q=0.9, water=None, x=0.0):
@@ -178,7 +178,7 @@ def test_fuse_is_deterministic_and_filters_far_candidates():
     ids = [s.cand.tile_id for s in out]
     assert ids.index("t1") < ids.index("t3")  # equal scores tie-break by tile_id
     assert out[0].cand.tile_id == "t2"  # event confidence outweighs a small similarity gap
-    assert all(set(s.parts) == {"sim_norm", "event_conf", "q", "spatial_fit"} for s in out)
+    assert all(set(s.parts) == {"sim_norm", "event_conf", "q", "spatial_fit", "landcover"} for s in out)
 
 
 def test_fuse_without_spatial_constraint_keeps_everyone():
@@ -232,3 +232,25 @@ def test_before_after_images_bracket_the_change_and_prefer_dry_seasons():
     got = _pick_images(comps, "2021-10-05", "2022-06-10")
     assert got["before"]["season"] == "2021-MAM"  # dry beats the later monsoon composite
     assert got["after"]["season"] == "2023-MAM"  # same season of year as before, after the change
+
+
+def test_landcover_words_rank_area_types_only():
+    assert parse("dense forest").landcover == ("trees",)
+    assert parse("farmland in hasdeo").landcover == ("crops",)
+    assert parse("river").landcover == ()  # linear feature: never ranked by a tile's water share
+    assert parse("new buildings in a village").landcover == ()  # change search: events rank it
+
+
+def test_landcover_share_uses_the_closest_map_year():
+    from query.retrieve import landcover_share
+
+    maps = {2019: {"trees": 0.2, "crops": 0.5}, 2023: {"trees": 0.8, "crops": 0.1}}
+    assert landcover_share(maps, 2020, ("trees",)) == 0.2
+    assert landcover_share(maps, 2026, ("trees", "crops")) == 0.9
+    assert landcover_share({}, 2020, ("trees",)) == 0.0 and landcover_share(maps, 2020, ()) == 0.0
+
+
+def test_landcover_share_lifts_a_tile_in_fusion():
+    a, b, c = _c("a", 0.30), _c("b", 0.29), _c("c", 0.0)  # c widens the similarity range (min-max normalised)
+    b = Candidate(**{**b.__dict__, "lc": 0.9})
+    assert [s.cand.tile_id for s in fuse([a, b, c], {}, W)] == ["b", "a", "c"]

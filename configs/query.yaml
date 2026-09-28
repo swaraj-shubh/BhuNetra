@@ -10,6 +10,13 @@ change_types:        # nouns/verbs that pick the type, only when a change cue is
   water: [flood, flooded, flooding, inundated, inundation, dried, drying, receded, "water level", "water extent",
     reservoir, pond]
   road: [road, roads, highway, highways, expressway, track, tracks]
+landcover:           # area-type words ranked with the independent land-cover share (features/landcover.py).
+  # Linear features (river, creek, canal, road) are deliberately absent: a tile's water share mixes them with lakes/sea.
+  trees: [forest, forests, woodland, woodlands, jungle, trees, "tree cover", "forest cover"]
+  crops: [farmland, farmlands, cropland, croplands, "agricultural land", agriculture, fields, farms, crops]
+  built: [urban, town, towns, city, cities, residential, settlement, settlements, village, villages, "built-up", "built up"]
+  water: [lake, lakes, reservoir, reservoirs, "water body", "water bodies", sea, "open water", pond, ponds]
+  bare: [barren, "bare ground", "bare land", "bare soil", desert, "open ground"]
 relations: [near, "close to", "next to", along, beside, "adjacent to", around, alongside, by]
 targets:             # spatial targets with a precomputed per-tile distance (features/context.py)
   water: [river, rivers, lake, lakes, water, waterbody, "water body", reservoir, creek, canal, sea, coast, coastline,

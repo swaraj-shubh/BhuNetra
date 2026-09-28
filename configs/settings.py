@@ -90,6 +90,7 @@ class Fusion(_Strict):  # DESIGN.md §7 fusion score
     w_conf: float
     w_q: float
     w_sp: float
+    w_lc: float  # independent land-cover share of the queried area type (0 when the query names none)
 
 
 class Landsat(_Strict):
@@ -105,6 +106,10 @@ class Sar(_Strict):
     WATER_MIN_DB: float  # |VV log-ratio| for water appearance/disappearance agreement
     N_BEFORE: int  # S1 acquisitions before last_normal_date used for the "before" median
     N_AFTER: int  # S1 acquisitions from earliest_supported_date on for the "after" median
+
+
+class Lulc(_Strict):
+    MIN_FRAC: float  # footprint share a land-cover group must gain/lose for a transition (else "stable")
 
 
 class Composites(_Strict):
@@ -123,6 +128,7 @@ class Thresholds(_Strict):
     context: Context
     sar: Sar
     landsat: Landsat
+    lulc: Lulc
 
 
 class AOI(_Strict):

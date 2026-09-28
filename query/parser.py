@@ -22,6 +22,7 @@ class Parsed:
     aoi: str | None
     sensor: str | None
     warnings: tuple[str, ...]
+    landcover: tuple[str, ...] = ()  # land-cover groups named (area types only; configs/query.yaml landcover)
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -94,4 +95,6 @@ def parse(text: str) -> Parsed:
     sem = " ".join(w for w in re.findall(r"[\w-]+", sem) if w not in set(lexicon["stopwords"]))
     if not sem:  # e.g. "what changed near the river": fall back to the type names, then the raw text
         sem = " ".join(types) or " ".join(text.split())
-    return Parsed(text, sem, change, types, near, dates, aoi, sensor, warnings)
+    # land cover ranks appearance searches only; "near a lake" is a spatial target, already cut from s above
+    cover = () if change else tuple(g for g, ws in lexicon.get("landcover", {}).items() if _has(s, ws))
+    return Parsed(text, sem, change, types, near, dates, aoi, sensor, warnings, cover)

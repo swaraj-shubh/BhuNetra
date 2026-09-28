@@ -130,7 +130,7 @@ def search(p: Parsed, req: Request, vec=None, exclude_tiles: frozenset[str] = fr
         tiles = [t for t in tiles if t not in exclude_tiles]
         if not tiles:
             return {"sites": [], "warnings": warnings}
-        sites = _assemble(conn, tiles, sem, ev, near, req.k)
+        sites = _assemble(conn, tiles, sem, ev, near, req.k, p.landcover)
     return {"sites": sites, "warnings": warnings}
 
 
@@ -153,7 +153,17 @@ def _available_near(conn, near: dict[str, float], aoi: str | None, warnings: lis
     return {t: d for t, d in near.items() if t in have}
 
 
-def _assemble(conn, tiles: list[str], sem: dict, ev: dict, near: dict[str, float], k: int) -> list[dict]:
+def landcover_share(fracs_by_year: dict[int, dict], year: int | None, groups: tuple[str, ...]) -> float:
+    """Share of the named land-cover groups in the map year closest to the result's season (0 without maps)."""
+    if not fracs_by_year or not groups:
+        return 0.0
+    y = min(fracs_by_year, key=lambda k: abs(k - year)) if year else max(fracs_by_year)
+    return round(sum(fracs_by_year[y].get(g, 0.0) for g in groups), 4)
+
+
+def _assemble(
+    conn, tiles: list[str], sem: dict, ev: dict, near: dict[str, float], k: int, cover: tuple[str, ...] = ()
+) -> list[dict]:
     """Candidates -> fusion -> unique-site dedup -> response dicts (shared by text and image search)."""
     rows = conn.execute(
         text(
@@ -177,6 +187,12 @@ def _assemble(conn, tiles: list[str], sem: dict, ev: dict, near: dict[str, float
         ).mappings()
     }
 
+    lc_rows: dict[str, dict[int, dict]] = {}
+    if cover:  # area-type query: independent land-cover shares, a stored lookup (§2.1)
+        for tid, year, fracs in conn.execute(
+            text("SELECT tile_id, year, fracs FROM tile_landcover WHERE tile_id = ANY(:ids)"), {"ids": tiles}
+        ):
+            lc_rows.setdefault(tid, {})[year] = fracs
     cands = []
     for tid in tiles:
         tr = tile_rows[tid]
@@ -192,6 +208,11 @@ def _assemble(conn, tiles: list[str], sem: dict, ev: dict, near: dict[str, float
                 event_conf=max((e["confidence"] for e in tile_events), default=0.0),
                 q=float(_pl(h)["q_mean"]) if h else 0.0,
                 dist_m={tgt: float(v) for tgt, v in (tr["dist"] or {}).items()},
+                lc=landcover_share(
+                    lc_rows.get(tid, {}),
+                    int(_pl(h)["season"][:4]) if h and _pl(h).get("season") else None,
+                    cover,
+                ),
                 payload={"hit": h, "events": tile_events, "geom": tr["geom"]},
             )
         )

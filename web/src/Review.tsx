@@ -19,9 +19,10 @@ type Timeline = { dates: string[]; [index: string]: (number | null)[] | string[]
 type Check = { agrees: boolean | null } | undefined;
 type Obs = { acq_date: string; scene_id: string; source: string; q: number } | null;
 type Img = { season: string; start_date: string; end_date: string; n_obs: number; dates: string[]; scene_ids: string[]; chip_url: string } | null;
+type Lulc = { before_year: number; after_year: number; before: Record<string, number> | null; after: Record<string, number> | null; type: string | null };
 type Hist = { ts: string; actor: string; action: string; payload: Record<string, unknown> };
 export type FullEvent = EventRow & {
-  evidence?: { timeline?: Timeline; landsat?: Check; s1?: Check };
+  evidence?: { timeline?: Timeline; landsat?: Check; s1?: Check; lulc?: Lulc };
   location?: { lat: number; lon: number };
   area_ha?: number;
   sensors?: string[];
@@ -120,6 +121,13 @@ function checkText(c: Check, name: string) {
   return c.agrees ? <span className="ok">{name}: agrees ✓</span> : <span className="bad">{name}: does not agree</span>;
 }
 
+function lulcText(l: Lulc | undefined) {
+  if (!l || !l.before || !l.after) return <span className="muted">Land cover (independent annual map): no map for {l ? `${l.before_year}/${l.after_year}` : "these years"}</span>;
+  const top = (f: Record<string, number>) => Object.entries(f).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([g, v]) => `${g} ${Math.round(v * 100)}%`).join(", ");
+  const verdict = l.type === "stable" ? "no land-cover change" : l.type === "other" ? "some change" : `looks like ${typeLabel(l.type ?? "")}`;
+  return <span>Land cover (independent annual map): {l.before_year} {top(l.before)} → {l.after_year} {top(l.after)} · <b>{verdict}</b></span>;
+}
+
 function ImageFig({ img, label }: { img: Img; label: string }) {
   if (!img) return <figure><div className="nochip big" /><figcaption>{label}: no clear image</figcaption></figure>;
   const span = img.dates.length ? `${img.dates[0]} … ${img.dates[img.dates.length - 1]}` : `${img.start_date} … ${img.end_date}`;
@@ -159,7 +167,7 @@ export function EvidencePanel({ ev }: { ev: FullEvent }) {
       <ObsLine o={ev.observations?.first_changed ?? null} label="First observation showing the change" date={ev.earliest_supported_date} />
       <h3>Sensors and cross-checks</h3>
       <p>Supported by: {(ev.sensors ?? []).map((s) => SENSOR_TEXT[s] ?? s).join(", ") || "—"}</p>
-      <p className="checks">{checkText(ev.evidence?.landsat, "Landsat (2nd optical satellite)")}<br />{checkText(ev.evidence?.s1, "Sentinel-1 radar (sees through cloud)")}</p>
+      <p className="checks">{checkText(ev.evidence?.landsat, "Landsat (2nd optical satellite)")}<br />{checkText(ev.evidence?.s1, "Sentinel-1 radar (sees through cloud)")}<br />{lulcText(ev.evidence?.lulc)}</p>
       {ev.evidence?.timeline && <>
         <h3>What the satellite measured over time</h3>
         <TimelineSvg tl={ev.evidence.timeline} ev={ev} />

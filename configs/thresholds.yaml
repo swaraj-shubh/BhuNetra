@@ -14,4 +14,5 @@ context:   { NEAR_M: 1000, WATER_OCCURRENCE_MIN: 25, WATER_MIN_PX: 10,
              ROAD_CLASSES: [motorway, trunk, primary, secondary, tertiary, motorway_link, trunk_link, primary_link, secondary_link, residential, unclassified] }
 # M9 (2026-09-27, untuned, logged in STATUS): Sentinel-1 log-ratio evidence (dB) and before/after windows
 landsat:   { WINDOW_DAYS: 365, MIN_OBS: 3, MIN_VALID_FRAC: 0.5 }   # M9 2026-09-27 untuned: year-before vs year-after medians
+lulc:      { MIN_FRAC: 0.2 }   # 2026-09-28 untuned: IO annual LULC transition in the event footprint (evidence only)
 sar:       { MIN_DB: 1.5, WATER_MIN_DB: 3.0, N_BEFORE: 3, N_AFTER: 3 }

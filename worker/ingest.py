@@ -109,6 +109,45 @@ def register_context(aoi: str, tiles: list[tiling.Tile], epsg: int) -> str:
     return "written"
 
 
+def register_landcover(aoi: str, tiles: list[tiling.Tile]) -> str:
+    """Per-tile land-cover shares per year (features/landcover.py). Skipped when stored lineage is unchanged."""
+    from features import landcover
+
+    lc = landcover.compute(aoi, tiles)
+    if not lc:
+        return "not staged"
+    with db.engine().begin() as conn:
+        stored = dict(
+            conn.execute(
+                text(
+                    "SELECT DISTINCT ON (l.year) l.year, l.lineage FROM tile_landcover l JOIN tiles t USING (tile_id) "
+                    "WHERE t.aoi = :a"
+                ),
+                {"a": aoi},
+            ).all()
+        )
+        if all(stored.get(y) == lin for y, (_, lin) in lc.items()):
+            return "skipped"
+        conn.execute(
+            text("DELETE FROM tile_landcover WHERE tile_id IN (SELECT tile_id FROM tiles WHERE aoi = :a)"),
+            {"a": aoi},
+        )
+        for year, (fracs, lin) in lc.items():
+            conn.execute(
+                text(
+                    "INSERT INTO tile_landcover (tile_id, year, fracs, lineage) "
+                    "VALUES (:t, :y, CAST(:f AS jsonb), CAST(:l AS jsonb))"
+                ),
+                [
+                    {"t": t.tile_id, "y": year, "f": json.dumps(f), "l": json.dumps(lin)}
+                    for t, f in zip(tiles, fracs, strict=True)
+                    if f is not None
+                ],
+            )
+        audit.append(conn, ACTOR, "ingest.landcover", {"aoi": aoi, "years": sorted(lc)})
+    return "written"
+
+
 def ingest_scene(folder: Path, tiles: list[tiling.Tile]) -> str:
     meta = scene.read_meta(folder)
     scene_id = "+".join(meta["source_items"])
@@ -313,6 +352,8 @@ def ingest_aoi(aoi: str) -> dict:
         register_tiles(conn, aoi, tiles, epsg)
     with timed("context", aoi=aoi):
         counts_ctx = register_context(aoi, tiles, epsg)
+    with timed("landcover", aoi=aoi):
+        register_landcover(aoi, tiles)
     src_dir = paths.raw / aois[aoi].optical_source / aoi  # one optical source per AOI time series (M3b)
     folders = sorted(p for p in src_dir.iterdir() if (p / "scene.json").exists())
     counts: dict[str, int] = defaultdict(int)
