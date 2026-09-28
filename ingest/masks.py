@@ -40,6 +40,7 @@ def landsat_valid_mask(qa: np.ndarray) -> np.ndarray:
     return ~_bits(qa, bands["landsat"]["qa_invalid_bits"])
 
 
-def s2_valid_mask(scl: np.ndarray, cld: np.ndarray | None = None) -> np.ndarray:
-    """True where usable: SCL not invalid and not (dilated) cloud."""
-    return ~(np.isin(scl, bands["scl"]["invalid"]) | s2_cloud_mask(scl, cld))
+def s2_valid_mask(scl: np.ndarray, cld: np.ndarray | None = None, snow: bool = False) -> np.ndarray:
+    """True where usable: SCL not invalid, not (dilated) cloud, and not snow where the AOI masks snow."""
+    bad = list(bands["scl"]["invalid"]) + (list(bands["scl"]["snow"]) if snow else [])
+    return ~(np.isin(scl, bad) | s2_cloud_mask(scl, cld))

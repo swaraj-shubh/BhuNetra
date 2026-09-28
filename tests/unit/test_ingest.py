@@ -88,3 +88,16 @@ def test_s2_offset_rule_ignores_stale_metadata_when_offset_already_applied():
     assert band_meta(item(None), "red") == (0.0001, -0.1)  # c1-l2a: DNs still carry +1000
     assert band_meta(item(False), "red") == (0.0001, -0.1)  # l2a baseline 04.00, not harmonised
     assert band_meta(item(True), "red") == (0.0001, 0.0)  # l2a harmonised: metadata -0.1 is stale
+
+
+def test_snow_is_masked_only_where_the_aoi_asks_for_it():
+    import numpy as np
+
+    from ingest.masks import s2_valid_mask
+
+    scl = np.array([[4, 11], [5, 11]], np.uint8)  # vegetation, snow, bare, snow
+    assert s2_valid_mask(scl).tolist() == [
+        [True, True],
+        [True, True],
+    ]  # default: salt pans labelled 11 stay usable
+    assert s2_valid_mask(scl, snow=True).tolist() == [[True, False], [True, False]]

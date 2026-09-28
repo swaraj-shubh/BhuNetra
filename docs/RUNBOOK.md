@@ -32,6 +32,9 @@ records every model / dataset in `manifests/`. Nothing else ever touches the net
      Example manifest (one multi-band file per date, band names in the TIFF): `sensor: generic`,
      `scale: 2.75e-05`, `offset: -0.2`, `nodata: 0`.
 
+- **Snowy area** (e.g. a Himalayan AOI): add `mask_snow: true` to `configs/aoi/<name>.yaml` before ingest, so
+  Sentinel-2 snow (SCL 11) is masked. It is off by default because Sen2Cor sometimes labels bright salt pans as snow.
+
 ## 2. Full index build
 
 ```bash

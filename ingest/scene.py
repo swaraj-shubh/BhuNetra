@@ -59,6 +59,12 @@ def _read(folder: Path, band: dict, expect_transform: Affine | None) -> tuple[np
         return d.read(1), d.transform, d.crs.to_epsg()
 
 
+def _mask_snow(aoi: str) -> bool:
+    from configs.settings import aois
+
+    return aoi in aois and aois[aoi].mask_snow
+
+
 def load_s2(folder: Path) -> Observation:
     meta = read_meta(folder)
     files = meta["bands"]
@@ -83,7 +89,7 @@ def load_s2(folder: Path) -> Observation:
         epsg=epsg,
         transform=transform,
         refl=refl,
-        valid=present & masks.s2_valid_mask(scl, cld),
+        valid=present & masks.s2_valid_mask(scl, cld, snow=_mask_snow(meta["aoi"])),
         cloud=masks.s2_cloud_mask(scl, cld),
     )
 

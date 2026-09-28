@@ -139,6 +139,9 @@ class AOI(_Strict):
     optical_source: str = (
         "sentinel2"  # the one optical source this AOI's time series uses (M3b; fusion is M9)
     )
+    mask_snow: bool = (
+        False  # DESIGN.md §9 "11 snow per AOI": mask SCL snow where snow occurs (Sen2Cor mislabels salt pans)
+    )
 
 
 class Paths(_Strict):
