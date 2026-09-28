@@ -36,7 +36,7 @@ type Parsed = {
   aoi: string | null;
   landcover?: string[];
 };
-type Mode = { kind: "text"; query: string } | { kind: "similar"; seed: Site; season: string } | null;
+type Mode = { kind: "text"; query: string } | { kind: "similar"; seed: Site; season: string } | { kind: "upload"; name: string } | null;
 type Group = { cluster: number; size: number; contains_seed: boolean };
 type Tab = "search" | "review" | "system";
 type Archive = { aois: Record<string, { bbox: number[]; area_km2: number }>; area_km2: number; scenes: number; auth: string };
@@ -318,6 +318,24 @@ export default function App() {
     setStatus(`${body.sites.length} look-alike places`);
   }
 
+  async function searchByImage(file: File) {
+    clearClusters();
+    const b64 = await new Promise<string>((ok, fail) => {
+      const rd = new FileReader();
+      rd.onload = () => ok(String(rd.result).split(",")[1] ?? "");
+      rd.onerror = () => fail(new Error("could not read the file"));
+      rd.readAsDataURL(file);
+    });
+    const t0 = performance.now();
+    const body = await call("Encoding your image and searching the archive…", async () => (await post("/search/image", { chip: b64, k: 20, aoi: aoi || null })).json());
+    if (!body) return;
+    setFocusArea(null);
+    setSites(body.sites);
+    setMode({ kind: "upload", name: file.name });
+    setSelected(null);
+    setStatus(`${body.sites.length} places like your image · ${fmtMs(performance.now() - t0)}`);
+  }
+
   async function clusters(seed: Site) {
     const body = await call("Grouping look-alike places…", async () => (await post("/discover/cluster", { seed_tile_id: seed.tile_id })).json());
     if (!body) return;
@@ -429,7 +447,7 @@ export default function App() {
 
       <div className="app">
         <aside>
-          {tab === "system" ? <System /> : tab === "review" ? <Review onShow={showEvent} drawer={drawerEl} /> : <>
+          {tab === "system" ? <System /> : tab === "review" ? <Review onShow={showEvent} drawer={drawerEl} mapBounds={() => map.current?.getBounds().toArray().flat() ?? null} /> : <>
             <form className="searchbox" onSubmit={(e) => { e.preventDefault(); runSearch(query); }}>
               <div className="search-input">
                 <Icon.Search />
@@ -451,6 +469,10 @@ export default function App() {
                 </div>
               )}
               <button type="submit" className="primary block" disabled={busy}>{busy ? "Searching…" : "Search"}</button>
+              <label className="upload" title="A multiband GeoTIFF with bands named blue, green, red, nir, swir1, swir2 (e.g. downloaded from a result)">
+                <Icon.Similar /> or search with an image (GeoTIFF)
+                <input type="file" accept=".tif,.tiff,image/tiff" onChange={(e) => { const f = e.target.files?.[0]; if (f) searchByImage(f); e.target.value = ""; }} />
+              </label>
             </form>
 
             {error && <div className="alert">Something went wrong: {error}</div>}
@@ -473,6 +495,11 @@ export default function App() {
                     <div className="pills">{pills.map((p) => <span key={p} className="pill">{p}</span>)}</div>
                     {Object.keys(parsed?.near ?? {}).includes("water") && <p className="fine">* water = river, lake, reservoir, creek or salt pan (the water map does not tell them apart)</p>}
                   </>
+                ) : mode.kind === "upload" ? (
+                  <div className="rh-row">
+                    {textResults && <button className="link" onClick={backToResults}><Icon.Back /> Back</button>}
+                    <b className="rh-title">Places like “{mode.name}”</b>
+                  </div>
                 ) : (
                   <>
                     <div className="rh-row">
@@ -555,6 +582,7 @@ export default function App() {
                     ))}
                   </div>
                 )}
+                {sel.season && <a className="link-btn" href={`/chips/${sel.tile_id}/${sel.season}.tif`} download><Icon.Download /> Download this tile (6-band GeoTIFF, {seasonLabel(sel.season)})</a>}
                 <details className="card">
                   <summary>Search provenance</summary>
                   <p>Satellite scenes behind this picture: {sel.provenance.scene_ids.length}</p>

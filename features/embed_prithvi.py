@@ -94,6 +94,11 @@ def _load():
     return enc, cfg
 
 
+def model_size() -> int:
+    """Input window of the encoder in pixels (config img_size)."""
+    return int(json.loads((DIR / "config.json").read_text(encoding="utf-8"))["pretrained_cfg"]["img_size"])
+
+
 @lru_cache(maxsize=1)
 def version() -> str:
     from governance.model_registry import verified

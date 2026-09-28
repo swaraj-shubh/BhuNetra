@@ -208,7 +208,8 @@ export function EvidencePanel({ ev }: { ev: FullEvent }) {
   );
 }
 
-export default function Review({ onShow, drawer }: { onShow: (ev: EventRow | null) => void; drawer: HTMLElement | null }) {
+export default function Review({ onShow, drawer, mapBounds }: { onShow: (ev: EventRow | null) => void; drawer: HTMLElement | null; mapBounds: () => number[] | null }) {
+  const [bbox, setBbox] = useState<number[] | null>(null);
   const [aoi, setAoi] = useState("");
   const [type, setType] = useState("");
   const [t1, setT1] = useState("");
@@ -229,6 +230,7 @@ export default function Review({ onShow, drawer }: { onShow: (ev: EventRow | nul
     if (type) q.set("type", type);
     if (t1) q.set("t1", t1);
     if (t2) q.set("t2", t2);
+    if (bbox) q.set("bbox", bbox.map((v) => v.toFixed(5)).join(","));
     setLoading(true);
     try {
       const d = await (await fetch(`/change?${q}`)).json();
@@ -236,7 +238,7 @@ export default function Review({ onShow, drawer }: { onShow: (ev: EventRow | nul
       setRows(d.events as EventRow[]);
     } finally { setLoading(false); }
   }
-  useEffect(() => { load(); }, [aoi, type, t1, t2, showHidden]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, [aoi, type, t1, t2, showHidden, bbox]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function open(ev: EventRow) {
     const full = await (await fetch(`/events/${ev.event_id}`)).json();
@@ -298,6 +300,12 @@ export default function Review({ onShow, drawer }: { onShow: (ev: EventRow | nul
         </select></label>
         <label>Changed from<input type="date" value={t1} onChange={(e) => setT1(e.target.value)} /></label>
         <label>To<input type="date" value={t2} onChange={(e) => setT2(e.target.value)} /></label>
+      </div>
+      <div className="area-row">
+        {bbox ? <>
+          <span className="pill">Area: current map view ({bbox[1].toFixed(3)}°, {bbox[0].toFixed(3)}° → {bbox[3].toFixed(3)}°, {bbox[2].toFixed(3)}°)</span>
+          <button className="link" onClick={() => setBbox(null)}>clear</button>
+        </> : <button className="link" onClick={() => setBbox(mapBounds())} title="Frame any area on the map, then limit the queue to it">Limit to the area shown on the map</button>}
       </div>
       <label className="check"><input type="checkbox" checked={showHidden} onChange={(e) => setShowHidden(e.target.checked)} /> Include hidden changes (low confidence or unclassified)</label>
       <div className="queue-stats">

@@ -52,6 +52,16 @@ def _warm_cluster() -> None:
 
     from query import cluster
 
+    try:  # image upload encodes with Prithvi: load it now, not on the analyst's first upload (~15 s)
+        from features import embed_prithvi
+
+        embed_prithvi.model_size()
+        embed_prithvi.feature_map(np.zeros((6, 224, 224), np.float32), "2024-01-01", 20.0, 78.0)
+    except Exception as e:  # noqa: BLE001 - weights missing (CI/laptop): uploads will report it
+        import logging
+
+        logging.getLogger("api").warning("prithvi warm-up skipped: %s", e)
+
     try:
         cluster.cluster(np.random.default_rng(0).normal(size=(60, 32)).astype(np.float32), 5, 4)
     except Exception as e:  # noqa: BLE001 - warm-up only; a real request reports its own error
@@ -368,6 +378,7 @@ def change(
     min_conf: float = T.events.OPERATING_CONF,
     unreviewed: bool = False,  # workbench queue: only events no analyst has decided yet
     all_types: bool = False,  # include events.HIDDEN_TYPES (hidden by default: precision first, §2.11)
+    bbox: str | None = None,  # "min_lon,min_lat,max_lon,max_lat": any analyst-specified area (PS 2.2.2)
     limit: int | None = Query(
         default=None, ge=1, le=100000
     ),  # workbench page size; evaluation omits it (all events)
@@ -389,6 +400,13 @@ def change(
             params[key] = val
     if unreviewed:
         where.append("e.analyst_status = 'unreviewed'")
+    if bbox is not None:
+        try:
+            x0, y0, x1, y1 = (float(v) for v in bbox.split(","))
+        except ValueError:
+            raise HTTPException(422, "bbox must be min_lon,min_lat,max_lon,max_lat") from None
+        where.append("ST_Intersects(e.geom, ST_MakeEnvelope(:bx0, :by0, :bx1, :by1, 4326))")
+        params |= {"bx0": x0, "by0": y0, "bx1": x1, "by1": y1}
     if type is None and not all_types and T.events.HIDDEN_TYPES:
         where.append("NOT (e.change_type::text = ANY(:hidden))")
         params["hidden"] = list(T.events.HIDDEN_TYPES)
@@ -536,6 +554,97 @@ def chip(tile_id: str, season: str, size: int = 256) -> Response:
     return Response(buf.getvalue(), media_type="image/png")
 
 
+@app.get("/chips/{tile_id}/{season}.tif")
+def chip_tif(tile_id: str, season: str) -> Response:
+    """The tile's 6-band reflectance composite as a GeoTIFF (for image search by upload, and for analysts)."""
+    import numpy as np
+    from rasterio.io import MemoryFile
+
+    aoi = tile_id.split("_")[0]
+    f = paths.composites / aoi / f"{season}.tif"
+    if aoi not in aois or not f.exists() or not season.replace("-", "").isalnum():
+        raise HTTPException(404)
+    t = next((t for t in tiling.tiles(aoi, *_grid(aoi)) if t.tile_id == tile_id), None)
+    if t is None:
+        raise HTTPException(404)
+    with rasterio.open(f) as d:
+        w = tiling.window(t, d.transform)
+        names = [n for n in d.descriptions if n]
+        arr = np.stack([d.read(d.descriptions.index(n) + 1, window=w) for n in names]).astype(np.float32)
+        prof = {
+            "driver": "GTiff",
+            "dtype": "float32",
+            "count": len(names),
+            "height": arr.shape[1],
+            "width": arr.shape[2],
+            "crs": d.crs,
+            "transform": d.window_transform(w),
+            "nodata": float("nan"),
+        }
+    with MemoryFile() as mem:
+        with mem.open(**prof) as out:
+            out.write(arr)
+            for i, n in enumerate(names, 1):
+                out.set_band_description(i, n)
+            out.update_tags(season=season, tile_id=tile_id, source="EO Archive composite (reflectance 0-1)")
+        data = mem.read()
+    return Response(
+        data,
+        media_type="image/tiff",
+        headers={"Content-Disposition": f'attachment; filename="{tile_id}_{season}.tif"'},
+    )
+
+
+def _embed_chip(b64: str, date: str | None) -> list[float]:
+    """Uploaded multiband GeoTIFF -> eo_vec (Prithvi), the same encoder as the archive. Encoding the query chip is
+    the one model call the query path allows (DESIGN.md §2.1). Bands are found by description (blue, green, red,
+    nir or nir_narrow, swir1, swir2); digital numbers 0-10000 are scaled to reflectance."""
+    import base64
+    import binascii
+    import tempfile
+    from datetime import UTC, datetime
+
+    import numpy as np
+
+    from features import embed_prithvi
+
+    try:
+        raw = base64.b64decode(b64, validate=True)
+    except binascii.Error:
+        raise HTTPException(422, "chip must be a base64-encoded GeoTIFF") from None
+    if len(raw) > 30_000_000:
+        raise HTTPException(413, "chip larger than 30 MB")
+    with tempfile.TemporaryDirectory() as d:
+        src = Path(d) / "chip.tif"
+        src.write_bytes(raw)
+        try:
+            with rasterio.open(src) as ds:
+                names = [(n or "").lower() for n in ds.descriptions]
+                used = embed_prithvi.bands_used(names)
+                x = np.stack([ds.read(names.index(b) + 1).astype(np.float32) for b in used])
+                h, w, crs, bounds = ds.height, ds.width, ds.crs, ds.bounds
+        except rasterio.errors.RasterioIOError:
+            raise HTTPException(422, "chip is not a readable GeoTIFF") from None
+        except ValueError as e:
+            raise HTTPException(422, f"{e}; name the bands blue, green, red, nir, swir1, swir2") from None
+    if max(h, w) > 1024 or min(h, w) < 16:
+        raise HTTPException(422, "chip must be 16-1024 px on each side")
+    if np.nanmax(x) > 2.0:  # digital numbers (e.g. Sentinel-2 L2A 0-10000) -> reflectance
+        x = x / 10000.0
+    lon, lat = Transformer.from_crs(crs, 4326, always_xy=True).transform(
+        (bounds.left + bounds.right) / 2, (bounds.top + bounds.bottom) / 2
+    )
+    # Archive vectors pool a tile out of a 224 px context window (DESIGN.md §7). A small chip has no context, so it is
+    # reflect-padded to the model size: cosine to the stored vector of the same tile 0.913 unpadded -> 0.977 padded
+    # (2026-09-28, hasdeo_44N_0030_0031 2024-MAM; full real context 0.996).
+    size = embed_prithvi.model_size()
+    py, px = max(size - h, 0) // 2, max(size - w, 0) // 2
+    if py or px:
+        x = np.pad(x, ((0, 0), (py, max(size - h, 0) - py), (px, max(size - w, 0) - px)), mode="reflect")
+    fmap = embed_prithvi.feature_map(x, date or datetime.now(UTC).date().isoformat(), lat, lon)
+    return embed_prithvi.pool_tiles(fmap, [(py, px)], tile_px=min(h, w))[0].tolist()
+
+
 def _grid(aoi: str) -> tuple[tuple[float, float, float, float], int]:
     epsg = tiling.aoi_epsg(aois[aoi].bbox)
     return tiling.aoi_bounds_m(aois[aoi].bbox, epsg), epsg
@@ -547,7 +656,10 @@ def _grid(aoi: str) -> tuple[tuple[float, float, float, float], int]:
 class ImageQuery(BaseModel):
     tile_id: str | None = None  # a site already in the archive (its stored eo_vec)
     season: str | None = None  # which season of that tile; default: its latest with an eo_vec
-    chip: str | None = None  # 6-band chip upload: not implemented (needs blue..swir2, not RGB)
+    chip: str | None = (
+        None  # base64 multiband GeoTIFF (bands named blue..swir2), encoded by Prithvi at query time
+    )
+    chip_date: str | None = None  # acquisition date of the chip (Prithvi's temporal input); default today
     aoi: str | None = None
     date_range: tuple[str | None, str | None] | None = None
     k: int = Field(default=T.retrieval.TOP_K_SITES, ge=1, le=200)
@@ -560,9 +672,14 @@ def search_image(q: ImageQuery, user: dict = VIEWER) -> dict:
 
     from query import retrieve
 
-    if q.chip is not None or not q.tile_id:
-        raise HTTPException(422, "give tile_id (6-band chip upload is not implemented yet)")
     t0 = time.perf_counter()
+    if q.chip is not None:  # uploaded image: same encoder, same index, nothing excluded
+        vec = np.asarray(_embed_chip(q.chip, q.chip_date), np.float32)
+        sites = retrieve.search_image(vec, q.aoi, q.date_range, q.k)
+        LATENCY_MS["search_image_upload"] = round((time.perf_counter() - t0) * 1000, 1)
+        return {"seed": {"tile_id": None, "season": None, "upload": True}, "sites": sites}
+    if not q.tile_id:
+        raise HTTPException(422, "give tile_id or chip")
     with db.engine().connect() as conn:
         seed = retrieve.eo_vector(conn, q.tile_id, q.season)
     if seed is None:

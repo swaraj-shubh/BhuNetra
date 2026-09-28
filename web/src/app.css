@@ -131,7 +131,14 @@ main { flex: 1; position: relative; min-width: 0; }
 .skeleton .sk-thumb, .skeleton .sk-line { animation: pulse 1.2s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: .45; } }
 
+.upload { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--blue); cursor: pointer; align-self: flex-start; }
+.upload input { display: none; }
+.upload:hover { text-decoration: underline; }
+.link-btn { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--blue); text-decoration: none; }
+.link-btn:hover { text-decoration: underline; }
+
 /* ---------- review ---------- */
+.area-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 8px 0 0; font-size: 12px; }
 .queue-stats { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-2); margin: 10px 2px 4px; }
 .type-counts { display: flex; flex-wrap: wrap; gap: 10px; font-size: 11.5px; color: var(--muted); margin: 0 2px 10px; }
 .type-counts span { display: inline-flex; align-items: center; }
