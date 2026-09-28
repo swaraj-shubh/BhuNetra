@@ -28,6 +28,7 @@ export type FullEvent = EventRow & {
   sensors?: string[];
   observations?: { last_normal: Obs; first_changed: Obs };
   images?: { before: Img; after: Img };
+  tile_geometry?: GeoJSON.Polygon;
   history?: Hist[];
 };
 
@@ -48,6 +49,7 @@ const ACTION_TEXT: Record<string, string> = {
   "change.sar_evidence": "Sentinel-1 radar cross-check",
   "change.landsat_evidence": "Landsat cross-check",
   "change.calibrate": "Confidence calibration",
+  "change.lulc_evidence": "Land-cover cross-check (independent annual map)",
   "feedback.confirm": "Analyst confirmed",
   "feedback.reject": "Analyst rejected",
   export: "Exported in a signed package",
@@ -64,7 +66,7 @@ const TITLE: Record<string, string> = {
 export const eventTitle = (t: string, d: string | null) => TITLE[`${t}/${d}`] ?? (t === "other" ? "Unclassified change (low reliability)" : typeLabel(t));
 
 /** Confidence in words. The calibrated number is not shown as a probability: on our blind held-out set, events
- * above the operating threshold were real 61% of the time, so "95% likely real" would overstate it. */
+ * shown by default were real 71% of the time (2026-09-28), so "95% likely real" would overstate it. */
 export function confBand(c: number): { text: string; cls: string } {
   if (c >= 0.85) return { text: "High confidence", cls: "hi" };
   if (c >= 0.55) return { text: "Medium confidence", cls: "mid" }; // 0.55 = events.OPERATING_CONF (shown by default)
@@ -99,7 +101,7 @@ function TimelineSvg({ tl, ev }: { tl: Timeline; ev: EventRow }) {
   const mark = (iso: string | null, colour: string) =>
     iso && <line x1={x(new Date(iso).getTime())} x2={x(new Date(iso).getTime())} y1={P} y2={H - P} stroke={colour} strokeWidth={1.5} strokeDasharray="4 3" />;
   return (
-    <svg width={W} height={H} role="img" aria-label="Index timeline with last normal and earliest supported dates">
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label="Index timeline with last normal and earliest supported dates">
       <rect x={P} y={P} width={W - 2 * P} height={H - 2 * P} fill="none" stroke="#333" />
       <line x1={P} x2={W - P} y1={y(0)} y2={y(0)} stroke="#2a2f36" />
       {Object.entries(COLOURS).map(([k, [c]]) => {
@@ -151,33 +153,43 @@ function ObsLine({ o, label, date }: { o: Obs; label: string; date: string | nul
 export function EvidencePanel({ ev }: { ev: FullEvent }) {
   return (
     <>
-      <h2><i className="dot" style={{ background: TYPE_COLOUR[ev.change_type] }} />{eventTitle(ev.change_type, ev.direction)}</h2>
-      <p className="big-line"><ConfTag c={ev.confidence} /> · first seen <b>{ev.earliest_supported_date}</b></p>
-      <div className="pair">
-        <ImageFig img={ev.images?.before ?? null} label="Before" />
-        <ImageFig img={ev.images?.after ?? null} label="After" />
+      <div className="ev-title">
+        <h2><i className="dot" style={{ background: TYPE_COLOUR[ev.change_type] }} />{eventTitle(ev.change_type, ev.direction)}</h2>
+        <div><ConfTag c={ev.confidence} /> <span className="muted">first seen</span> <b>{ev.earliest_supported_date}</b></div>
       </div>
-      <h3>Where</h3>
-      <p>
-        {ev.location ? <>{ev.location.lat.toFixed(5)}° N, {ev.location.lon.toFixed(5)}° E</> : "—"}
-        {ev.area_ha !== undefined && <> · changed area {ev.area_ha < 1 ? ev.area_ha.toFixed(2) : ev.area_ha.toFixed(1)} ha</>} · {ev.aoi}
-      </p>
-      <h3>When (actual satellite observations)</h3>
-      <ObsLine o={ev.observations?.last_normal ?? null} label="Last normal observation" date={ev.last_normal_date} />
-      <ObsLine o={ev.observations?.first_changed ?? null} label="First observation showing the change" date={ev.earliest_supported_date} />
-      <h3>Sensors and cross-checks</h3>
-      <p>Supported by: {(ev.sensors ?? []).map((s) => SENSOR_TEXT[s] ?? s).join(", ") || "—"}</p>
-      <p className="checks">{checkText(ev.evidence?.landsat, "Landsat (2nd optical satellite)")}<br />{checkText(ev.evidence?.s1, "Sentinel-1 radar (sees through cloud)")}<br />{lulcText(ev.evidence?.lulc)}</p>
-      {ev.evidence?.timeline && <>
-        <h3>What the satellite measured over time</h3>
-        <TimelineSvg tl={ev.evidence.timeline} ev={ev} />
-        <p className="legend-inline">
-          {Object.values(COLOURS).map(([c, n]) => <span key={n}><i className="sw" style={{ background: c }} />{n}</span>)}
-          <span><i className="sw dash" style={{ borderColor: "#aaa" }} />last normal</span>
-          <span><i className="sw dash" style={{ borderColor: "#ff3b30" }} />change first seen</span>
-        </p>
-      </>}
-      <details>
+      <div className="card">
+        <div className="pair">
+          <ImageFig img={ev.images?.before ?? null} label="Before" />
+          <span className="pair-arrow" aria-hidden="true">→</span>
+          <ImageFig img={ev.images?.after ?? null} label="After" />
+        </div>
+      </div>
+      <div className="card facts">
+        <div><span className="k">Location</span><span>{ev.location ? `${ev.location.lat.toFixed(5)}° N, ${ev.location.lon.toFixed(5)}° E` : "—"}</span></div>
+        <div><span className="k">Changed area</span><span>{ev.area_ha === undefined ? "—" : `${ev.area_ha < 1 ? ev.area_ha.toFixed(2) : ev.area_ha.toFixed(1)} ha`} · {ev.aoi}</span></div>
+        <div><span className="k">Supported by</span><span>{(ev.sensors ?? []).map((x) => SENSOR_TEXT[x] ?? x).join(", ") || "—"}</span></div>
+      </div>
+      <div className="card">
+        <h3>When: the actual satellite observations</h3>
+        <ObsLine o={ev.observations?.last_normal ?? null} label="Last normal" date={ev.last_normal_date} />
+        <ObsLine o={ev.observations?.first_changed ?? null} label="First showing the change" date={ev.earliest_supported_date} />
+      </div>
+      <div className="card">
+        <h3>Independent cross-checks</h3>
+        <p className="checks">{checkText(ev.evidence?.landsat, "Landsat (2nd optical satellite)")}<br />{checkText(ev.evidence?.s1, "Sentinel-1 radar (sees through cloud)")}<br />{lulcText(ev.evidence?.lulc)}</p>
+      </div>
+      {ev.evidence?.timeline && (
+        <div className="card">
+          <h3>What the satellite measured over time</h3>
+          <TimelineSvg tl={ev.evidence.timeline} ev={ev} />
+          <p className="legend-inline">
+            {Object.values(COLOURS).map(([c, n]) => <span key={n}><i className="sw" style={{ background: c }} />{n}</span>)}
+            <span><i className="sw dash" style={{ borderColor: "#aaa" }} />last normal</span>
+            <span><i className="sw dash" style={{ borderColor: "#ff3b30" }} />change first seen</span>
+          </p>
+        </div>
+      )}
+      <details className="card">
         <summary>Processing history ({ev.history?.length ?? 0} steps) and source scenes</summary>
         <ol className="hist">
           {(ev.history ?? []).map((h, i) => (
@@ -190,7 +202,7 @@ export function EvidencePanel({ ev }: { ev: FullEvent }) {
         <p>Detection version {ev.provenance.cascade_version} · models {Object.entries(ev.provenance.model_versions ?? {}).map(([k, v]) => `${k}=${v}`).join(", ") || "—"}</p>
         <p>{ev.provenance.scene_ids.length} source scenes:</p>
         <p className="mono">{ev.provenance.scene_ids.join(", ")}</p>
-        <p className="muted">Every step above is in the tamper-evident audit log. Event {ev.event_id}.</p>
+        <p className="muted">Every step above is in the tamper-evident audit log · {ev.event_id}</p>
       </details>
     </>
   );
@@ -204,9 +216,11 @@ export default function Review({ onShow, drawer }: { onShow: (ev: EventRow | nul
   const [showHidden, setShowHidden] = useState(false);
   const [rows, setRows] = useState<EventRow[]>([]);
   const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(false);
   const [sel, setSel] = useState<FullEvent | null>(null);
   const [reason, setReason] = useState("");
   const [msg, setMsg] = useState("");
+  const [decided, setDecided] = useState(0);
 
   async function load() {
     const q = new URLSearchParams({ unreviewed: "true", limit: "200" });
@@ -215,20 +229,22 @@ export default function Review({ onShow, drawer }: { onShow: (ev: EventRow | nul
     if (type) q.set("type", type);
     if (t1) q.set("t1", t1);
     if (t2) q.set("t2", t2);
-    const r = await fetch(`/change?${q}`);
-    const d = await r.json();
-    setTotal(d.total ?? d.events.length);
-    setRows(d.events as EventRow[]);
+    setLoading(true);
+    try {
+      const d = await (await fetch(`/change?${q}`)).json();
+      setTotal(d.total ?? d.events.length);
+      setRows(d.events as EventRow[]);
+    } finally { setLoading(false); }
   }
   useEffect(() => { load(); }, [aoi, type, t1, t2, showHidden]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function open(ev: EventRow) {
-    const r = await fetch(`/events/${ev.event_id}`);
-    const full = await r.json();
+    const full = await (await fetch(`/events/${ev.event_id}`)).json();
     setSel(full);
     setReason("");
     setMsg("");
     onShow(full);
+    document.getElementById(`e-${ev.event_id}`)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }
 
   async function decide(decision: "confirm" | "reject") {
@@ -242,54 +258,87 @@ export default function Review({ onShow, drawer }: { onShow: (ev: EventRow | nul
     const i = rows.findIndex((e) => e.event_id === sel.event_id);
     const rest = rows.filter((e) => e.event_id !== sel.event_id);
     setRows(rest);
-    setMsg(`${sel.event_id} ${decision === "confirm" ? "confirmed" : "rejected"} and saved in the audit log.`);
+    setTotal((t) => t - 1);
+    setDecided((n) => n + 1);
+    setMsg(`${sel.event_id} ${decision === "confirm" ? "confirmed as a real change" : "rejected as a false alarm"} · audited`);
     if (rest[i]) open(rest[i]);
     else { setSel(null); onShow(null); }
   }
 
+  useEffect(() => { // analyst shortcuts: J/K move, C confirm, R reject (never while typing)
+    const k = (e: KeyboardEvent) => {
+      const el = e.target;
+      if ((el instanceof Element && el.closest("input, select, textarea")) || e.ctrlKey || e.metaKey || e.altKey) return;
+      const i = sel ? rows.findIndex((x) => x.event_id === sel.event_id) : -1;
+      if (e.key === "j" && rows[i + 1]) open(rows[i + 1]);
+      else if (e.key === "k" && i > 0) open(rows[i - 1]);
+      else if (e.key === "c" && sel) decide("confirm");
+      else if (e.key === "r" && sel) decide("reject");
+      else if (e.key === "Escape" && sel) { setSel(null); onShow(null); }
+    };
+    window.addEventListener("keydown", k);
+    return () => window.removeEventListener("keydown", k);
+  });
+
+  const counts = rows.reduce<Record<string, number>>((a, e) => ({ ...a, [e.change_type]: (a[e.change_type] ?? 0) + 1 }), {});
+  const pos = sel ? rows.findIndex((x) => x.event_id === sel.event_id) + 1 : 0;
   return (
     <div className="review">
-      <p className="sub">Changes found automatically in the archive, most confident first. Choose an area and time window, open a change, check the evidence, then confirm or reject it.</p>
-      <div className="row">
-        <select value={aoi} onChange={(e) => setAoi(e.target.value)} aria-label="Area of interest">
-          {["", "dholera", "hasdeo", "navimumbai"].map((a) => <option key={a} value={a}>{a ? `Area: ${a}` : "All areas"}</option>)}
-        </select>
-        <select value={type} onChange={(e) => setType(e.target.value)} aria-label="Change type">
-          <option value="">All change types</option>
+      <div className="panel-head">
+        <h2>Change review</h2>
+        <p className="muted">Detected automatically, most confident first. Open a change, check the evidence, then confirm or reject it.</p>
+      </div>
+      <div className="filters">
+        <label>Area<select value={aoi} onChange={(e) => setAoi(e.target.value)}>
+          {["", "dholera", "hasdeo", "navimumbai"].map((a) => <option key={a} value={a}>{a || "All areas"}</option>)}
+        </select></label>
+        <label>Type<select value={type} onChange={(e) => setType(e.target.value)}>
+          <option value="">All types</option>
           {Object.keys(TYPE_TEXT).map((t) => <option key={t} value={t}>{typeLabel(t)}</option>)}
-        </select>
+        </select></label>
+        <label>Changed from<input type="date" value={t1} onChange={(e) => setT1(e.target.value)} /></label>
+        <label>To<input type="date" value={t2} onChange={(e) => setT2(e.target.value)} /></label>
       </div>
-      <div className="row dates">
-        <label>Changed from <input type="date" value={t1} onChange={(e) => setT1(e.target.value)} /></label>
-        <label>to <input type="date" value={t2} onChange={(e) => setT2(e.target.value)} /></label>
+      <label className="check"><input type="checkbox" checked={showHidden} onChange={(e) => setShowHidden(e.target.checked)} /> Include hidden changes (low confidence or unclassified)</label>
+      <div className="queue-stats">
+        <span><b>{total.toLocaleString("en-IN")}</b> to review{total > rows.length ? ` · top ${rows.length} shown` : ""}</span>
+        {decided > 0 && <span className="ok">{decided} decided this session</span>}
       </div>
-      <label className="check"><input type="checkbox" checked={showHidden} onChange={(e) => setShowHidden(e.target.checked)} /> Also show hidden changes (low confidence, or unclassified)</label>
-      <p className="status">{total} changes to review{total > rows.length ? ` (showing the top ${rows.length})` : ""}</p>
+      <div className="type-counts">{Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([t, n]) => <span key={t}><i className="dot" style={{ background: TYPE_COLOUR[t] }} />{typeLabel(t)} {n}</span>)}</div>
 
       {sel && drawer && createPortal(
         <section className="drawer">
-          <button className="close" title="Close" onClick={() => { setSel(null); onShow(null); }}>×</button>
-          <EvidencePanel ev={sel} />
-          <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason (optional), e.g. seasonal flooding, crop harvest" aria-label="Reason" />
-          <div className="row">
-            <button className="primary" onClick={() => decide("confirm")}>✓ Real change</button>
-            <button className="ghost" onClick={() => decide("reject")}>✗ False alarm</button>
+          <div className="drawer-head">
+            <div><b>Change {pos || ""}</b><span className="muted"> of {rows.length} · {sel.event_id}</span></div>
+            <button className="icon-btn close" title="Close (Esc)" onClick={() => { setSel(null); onShow(null); }}>×</button>
           </div>
-          <p className="status">{msg}</p>
+          <div className="drawer-body"><EvidencePanel ev={sel} /></div>
+          <div className="drawer-actions">
+            <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason (optional), e.g. seasonal flooding, crop harvest" aria-label="Reason" />
+            <div className="row">
+              <button className="primary grow" onClick={() => decide("confirm")} title="Shortcut: C">✓ Real change <kbd>C</kbd></button>
+              <button className="danger grow" onClick={() => decide("reject")} title="Shortcut: R">✗ False alarm <kbd>R</kbd></button>
+            </div>
+            <p className="fine">{msg || "J / K: next / previous change · Esc: close"}</p>
+          </div>
         </section>,
         drawer,
       )}
 
-      <ol className="results compact">
-        {rows.map((e) => (
-          <li key={e.event_id} className={sel?.event_id === e.event_id ? "sel" : ""} onClick={() => open(e)}>
-            <div className="body">
-              <div className="line"><i className="dot" style={{ background: TYPE_COLOUR[e.change_type] }} /><b>{eventTitle(e.change_type, e.direction)}</b> · {e.aoi}</div>
-              <div className="line meta"><ConfTag c={e.confidence} /> · first seen {e.earliest_supported_date}</div>
-            </div>
-          </li>
-        ))}
-      </ol>
+      {loading && !rows.length ? <p className="muted"><i className="spinner" /> Loading changes…</p> : rows.length === 0 ? (
+        <div className="empty"><h3>Nothing to review</h3><p className="muted">No unreviewed changes match these filters.</p></div>
+      ) : (
+        <ol className="results compact">
+          {rows.map((e) => (
+            <li key={e.event_id} id={`e-${e.event_id}`} className={sel?.event_id === e.event_id ? "sel" : ""} onClick={() => open(e)}>
+              <div className="body">
+                <div className="line title"><i className="dot" style={{ background: TYPE_COLOUR[e.change_type] }} />{eventTitle(e.change_type, e.direction)}</div>
+                <div className="line meta"><ConfTag c={e.confidence} /><span className="fine">{e.aoi} · since {e.earliest_supported_date}</span></div>
+              </div>
+            </li>
+          ))}
+        </ol>
+      )}
     </div>
   );
 }

@@ -48,6 +48,7 @@ services:
       - ../models:/app/models:ro
       - ../manifests:/app/manifests:ro
       - ../eval/labels:/app/eval/labels:ro   # M5 sample + pre-labels for /label (human labels go to data/labels)
+      - ../eval/reports:/app/eval/reports:ro # latest held-out result for the System tab (/stats evaluation)
     depends_on:
       db: {condition: service_healthy}
       qdrant: {condition: service_started}

@@ -138,6 +138,26 @@ def stats() -> dict:
         "staging_report": json.loads(report.read_text(encoding="utf-8")) if report.exists() else None,
         "build": _build_record(),
         "hardware": _hardware(),
+        "evaluation": _evaluation(),
+    }
+
+
+def _evaluation() -> dict | None:
+    """Latest blind held-out change result (eval/reports/*_m5_heldout_final.json, written by eval/run.py)."""
+    runs = sorted((paths.root / "eval" / "reports").glob("*_m5_heldout_final.json"))
+    if not runs:
+        return None
+    ch = json.loads(runs[-1].read_text(encoding="utf-8"))["change"]
+    keep = ("n", "precision", "recall", "f1", "false_alarm_rate", "type_accuracy")
+    return {
+        "file": runs[-1].name,
+        "overall": {k: ch["overall"].get(k) for k in keep},
+        "per_type": {
+            t: {k: v.get(k) for k in ("n", "precision", "recall")} for t, v in ch["per_type"].items()
+        },
+        "earliest_date_median_err_days": (ch["overall"].get("earliest_date_abs_err_days") or {}).get(
+            "median"
+        ),
     }
 
 
@@ -428,8 +448,8 @@ def _event_context(conn, r) -> dict:
     the dates, the composites shown as before/after (with their acquisition dates), and the processing history."""
     loc = conn.execute(
         text(
-            "SELECT ST_Y(ST_Centroid(geom)), ST_X(ST_Centroid(geom)), ST_Area(geom::geography) / 1e4 "
-            "FROM change_events WHERE event_id = :i"
+            "SELECT ST_Y(ST_Centroid(e.geom)), ST_X(ST_Centroid(e.geom)), ST_Area(e.geom::geography) / 1e4, "
+            "ST_AsGeoJSON(t.geom) FROM change_events e JOIN tiles t USING (tile_id) WHERE e.event_id = :i"
         ),
         {"i": r["event_id"]},
     ).one()
@@ -486,6 +506,7 @@ def _event_context(conn, r) -> dict:
     )  # event ids are new on every run: earlier runs made other events
     return {
         "location": {"lat": round(loc[0], 5), "lon": round(loc[1], 5)},
+        "tile_geometry": json.loads(loc[3]),  # footprint of the before/after images (map context)
         "area_ha": round(loc[2], 2),
         "sensors": list(r["sensors"]),
         "observations": {

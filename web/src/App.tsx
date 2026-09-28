@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import Review, { ConfTag, EvidencePanel, type EventRow, type FullEvent, seasonLabel, SENSOR_TEXT, TYPE_COLOUR, typeLabel } from "./Review";
 import System from "./System";
+import * as Icon from "./Icons";
 import * as maplibregl from "maplibre-gl";
 import type { GeoJSONSource, LngLatBoundsLike, MapLayerMouseEvent } from "maplibre-gl";
 // v6 looks for its worker next to its own module, which does not exist once bundled: bundle it and point there.
@@ -37,32 +38,64 @@ type Parsed = {
 };
 type Mode = { kind: "text"; query: string } | { kind: "similar"; seed: Site; season: string } | null;
 type Group = { cluster: number; size: number; contains_seed: boolean };
+type Tab = "search" | "review" | "system";
+type Archive = { aois: Record<string, { bbox: number[]; area_km2: number }>; area_km2: number; scenes: number; auth: string };
 
 const WARNING_TEXT: Record<string, string> = {
   below_resolution: "Individual vehicles and small objects are below Sentinel-2's 10 m pixel: treat these results as a weak signal.",
 };
-const EXAMPLES = ["newly built structures near a river", "land clearing since 2023", "salt pans", "open-cast mine", "water body expanded"];
+const EXAMPLES = ["newly built structures near a river", "land clearing since 2023", "open-cast coal mine", "dense forest", "salt pans", "water body expanded"];
 const AOIS = ["", "dholera", "hasdeo", "navimumbai"];
 const GROUP_COLOURS = ["#e6194b", "#3cb44b", "#4363d8", "#f58231", "#911eb4", "#42d4f4"];
 const EMPTY: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
 const monthYear = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { month: "short", year: "numeric" });
 const fmtDist = (m: number) => (m < 50 ? "touches" : m < 1000 ? `${Math.round(m)} m from` : `${(m / 1000).toFixed(1)} km from`);
+const fmtMs = (ms: number) => (ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(1)} s`);
 
 function Bar({ v }: { v: number }) {
-  return <span className="bar"><span style={{ width: `${Math.max(4, Math.min(100, v * 100))}%` }} /></span>;
+  return <span className="bar" title={`${Math.round(v * 100)} / 100`}><span style={{ width: `${Math.max(4, Math.min(100, v * 100))}%` }} /></span>;
 }
 
 /** Plain-language summary of why a site is in the list. */
 function headline(s: Site) {
-  if (!s.events.length) return <span className="muted">Matched on appearance · no change detected here</span>;
+  if (!s.events.length) return <span className="title muted-strong">Appearance match</span>;
   const best = [...s.events].sort((a, b) => b.confidence - a.confidence)[0];
   const since = s.events.map((e) => e.earliest_supported_date).sort()[0];
   return (
-    <span>
+    <span className="title">
       <i className="dot" style={{ background: TYPE_COLOUR[best.change_type] }} />
-      <b>{typeLabel(best.change_type)}</b> detected, first seen <b>{monthYear(since)}</b> · <ConfTag c={best.confidence} />
-      {s.events.length > 1 && <span className="muted"> (+{s.events.length - 1} more)</span>}
+      {typeLabel(best.change_type)} <span className="muted">since {monthYear(since)}</span>
+      {s.events.length > 1 && <span className="muted"> · +{s.events.length - 1}</span>}
     </span>
+  );
+}
+
+function Skeleton() {
+  return <ol className="results">{Array.from({ length: 6 }, (_, i) => <li key={i} className="skeleton"><div className="sk-thumb" /><div className="body"><div className="sk-line w60" /><div className="sk-line w80" /><div className="sk-line w40" /></div></li>)}</ol>;
+}
+
+function HelpModal({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="modal-bg" onClick={onClose}>
+      <div className="modal" role="dialog" aria-label="How to use" onClick={(e) => e.stopPropagation()}>
+        <button className="icon-btn close" title="Close" onClick={onClose}><Icon.X /></button>
+        <h2>How to use the workbench</h2>
+        <div className="help-grid">
+          <section><h3><Icon.Search /> Search places</h3>
+            <p>Type what you are looking for in plain words. The system understands <b>change words</b> (built, cleared, flooded), <b>places</b> (near a river or road), <b>dates</b> (since 2023) and <b>land cover</b> (forest, farmland, urban).</p>
+            <p>Each result is a 640 m square of ground with a cloud-free satellite picture. Click one for its evidence.</p></section>
+          <section><h3><Icon.Similar /> Look-alikes and groups</h3>
+            <p><b>Look-alikes</b> finds other places that look like the chosen one, anywhere in the archive. <b>Groups</b> colours clusters of similar places on the map.</p>
+            <p><b>✓ / ✗</b> teaches the search what you mean; the list re-ranks immediately and the decision is audited.</p></section>
+          <section><h3><Icon.Change /> Review changes</h3>
+            <p>Changes detected automatically, most confident first. Choose an area and time window, open a change and check before/after images, dates, sensors and the independent cross-checks.</p>
+            <p>Keyboard: <kbd>J</kbd>/<kbd>K</kbd> next/previous, <kbd>C</kbd> real change, <kbd>R</kbd> false alarm.</p></section>
+          <section><h3><Icon.Shield /> What to trust</h3>
+            <p>Confidence is shown as high / medium / low. Low-confidence and unclassified changes are hidden unless asked for. Every decision and export is recorded in a tamper-evident audit log; exports are digitally signed.</p>
+            <p>At 10 m per pixel we see construction sites, clearing and mining, water and major roads, not individual vehicles or small buildings.</p></section>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -71,6 +104,7 @@ export default function App() {
   const map = useRef<maplibregl.Map | null>(null);
   const chipIds = useRef<string[]>([]);
   const markers = useRef<maplibregl.Marker[]>([]);
+  const overview = useRef<LngLatBoundsLike | null>(null);
   const [drawerEl, setDrawerEl] = useState<HTMLDivElement | null>(null);
   const [query, setQuery] = useState("");
   const [aoi, setAoi] = useState("");
@@ -81,29 +115,42 @@ export default function App() {
   const [warnings, setWarnings] = useState<string[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [status, setStatus] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
   const [ready, setReady] = useState(false);
-  const [tab, setTab] = useState<"search" | "review" | "system">("search");
+  const [tab, setTab] = useState<Tab>("search");
   const [t1, setT1] = useState("");
   const [t2, setT2] = useState("");
   const [sensor, setSensor] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
   const [selEvent, setSelEvent] = useState<FullEvent | null>(null);
   const [queryId, setQueryId] = useState<string | null>(null);
   const [fb, setFb] = useState<Record<string, string>>({});
   const [groups, setGroups] = useState<{ seed: string; list: Group[]; noise: number } | null>(null);
   const [showEventLayer, setShowEventLayer] = useState(false);
   const [focusArea, setFocusArea] = useState<string | null>(null);
+  const [archive, setArchive] = useState<Archive | null>(null);
+  const [cursor, setCursor] = useState<[number, number] | null>(null);
+  const [help, setHelp] = useState(false);
+  const [settings, setSettings] = useState(false);
   const [apiKey, setApiKey] = useState(() => { try { return localStorage.getItem("apikey") ?? ""; } catch { return ""; } });
 
   useEffect(() => {
     const m = new maplibregl.Map({
       container: mapDiv.current!,
-      style: { version: 8, sources: {}, layers: [{ id: "bg", type: "background", paint: { "background-color": "#1b1f24" } }] },
+      style: { version: 8, sources: {}, layers: [{ id: "bg", type: "background", paint: { "background-color": "#161b21" } }] },
       center: [72.2, 22.3],
       zoom: 9,
+      attributionControl: false,
     });
+    m.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-left");
+    m.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-right");
+    m.on("mousemove", (e) => setCursor([e.lngLat.lat, e.lngLat.lng]));
+    m.on("mouseout", () => setCursor(null));
     m.on("load", () => {
       m.addSource("aois", { type: "geojson", data: EMPTY });
-      m.addLayer({ id: "aois-line", type: "line", source: "aois", paint: { "line-color": "#6b7684", "line-width": 1.5, "line-dasharray": [3, 2] } });
+      m.addLayer({ id: "aois-fill", type: "fill", source: "aois", paint: { "fill-color": "#58a6ff", "fill-opacity": 0.04 } });
+      m.addLayer({ id: "aois-line", type: "line", source: "aois", paint: { "line-color": "#58a6ff", "line-opacity": 0.55, "line-width": 1.2, "line-dasharray": [3, 2] } });
       m.addSource("sites", { type: "geojson", data: EMPTY });
       m.addSource("event", { type: "geojson", data: EMPTY });
       m.addSource("clusters", { type: "geojson", data: EMPTY });
@@ -118,7 +165,8 @@ export default function App() {
       setReady(true);
       m.on("click", "sites-line", (e: MapLayerMouseEvent) => setSelected(String(e.features?.[0]?.properties?.tile_id ?? "")));
       // Archive extent from the start, so an analyst knows where imagery exists (labels as DOM markers: no glyphs offline)
-      fetch("/stats").then((r) => r.json()).then((st: { aois: Record<string, { bbox: number[]; area_km2: number }> }) => {
+      fetch("/stats").then((r) => r.json()).then((st: Archive) => {
+        setArchive(st);
         const entries = Object.entries(st.aois).filter(([, a]) => a.bbox);
         (m.getSource("aois") as GeoJSONSource).setData({
           type: "FeatureCollection",
@@ -128,15 +176,18 @@ export default function App() {
           }),
         });
         entries.forEach(([name, a]) => {
-          const el = document.createElement("div");
+          const el = document.createElement("button");
           el.className = "aoi-label";
+          el.title = `Zoom to ${name}`;
           el.textContent = `${name} · ${Math.round(a.area_km2)} km²`;
+          el.onclick = (e) => { e.stopPropagation(); m.fitBounds(a.bbox as LngLatBoundsLike, { padding: 60 }); };
           new maplibregl.Marker({ element: el, anchor: "bottom-left" }).setLngLat([a.bbox[0], a.bbox[3]]).addTo(m);
         });
-        if (entries.length) {
+        overview.current = entries.length ? (() => {
           const xs = entries.flatMap(([, a]) => [a.bbox[0], a.bbox[2]]), ys = entries.flatMap(([, a]) => [a.bbox[1], a.bbox[3]]);
-          m.fitBounds([Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)], { padding: 80, duration: 0 });
-        }
+          return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)] as LngLatBoundsLike;
+        })() : null;
+        if (overview.current) m.fitBounds(overview.current, { padding: 80, duration: 0 });
       }).catch(() => undefined);
     });
     map.current = m;
@@ -177,7 +228,7 @@ export default function App() {
     if (sites.length) zoomToArea(focusArea ?? sites[0].aoi);
   }, [sites, ready, mode]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /** Areas are hundreds of km apart: frame one area's results at a time (the banner offers the others). */
+  /** Areas are hundreds of km apart: frame one area's results at a time (the header offers the others). */
   function zoomToArea(area: string) {
     const m = map.current;
     if (!m) return;
@@ -194,39 +245,57 @@ export default function App() {
     if (!m || !m.getLayer("sites-sel")) return;
     m.setFilter("sites-sel", ["==", ["get", "tile_id"], selected ?? ""]);
     const s = sites.find((x) => x.tile_id === selected);
-    if (s && !s.events.length) m.flyTo({ center: s.geometry.coordinates[0][0] as [number, number], zoom: 14 }); // change sites zoom to the changed area instead
+    if (s && !s.events.length) { // change sites zoom to the changed area instead (showEvent)
+      const ring = s.geometry.coordinates[0];
+      m.fitBounds([ring[0] as [number, number], ring[2] as [number, number]], { padding: { top: 120, bottom: 120, left: 120, right: Math.min(560, m.getContainer().clientWidth / 2) }, maxZoom: 14 });
+    }
     markers.current.forEach((mk) => mk.getElement().classList.toggle("on", mk.getElement().textContent === String(s?.rank)));
+    if (s) document.getElementById(`r-${s.tile_id}`)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [selected, sites]);
+
+  useEffect(() => {
+    const m = map.current;
+    if (!m || !ready) return;
+    const vis = tab === "search" ? "visible" : "none";
+    for (const id of [...chipIds.current, "sites-line", "sites-sel", "clusters-fill"]) if (m.getLayer(id)) m.setLayoutProperty(id, "visibility", vis);
+    markers.current.forEach((mk) => { mk.getElement().style.display = tab === "search" ? "" : "none"; });
+    if (tab === "system" && overview.current) m.fitBounds(overview.current, { padding: 80 });
+    if (tab === "search" && sites.length) zoomToArea(focusArea ?? sites[0].aoi);
+  }, [tab, ready]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function clearClusters() {
     (map.current?.getSource("clusters") as GeoJSONSource | undefined)?.setData(EMPTY);
     setGroups(null);
   }
 
+  async function call<T>(label: string, fn: () => Promise<T>): Promise<T | undefined> {
+    setBusy(true); setError(""); setStatus(label);
+    try { return await fn(); } catch (e) { setError((e as Error).message); setStatus(""); return undefined; } finally { setBusy(false); }
+  }
+  async function post(path: string, body: unknown) {
+    const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    if (!r.ok) throw new Error(`${r.status}: ${(await r.text()).slice(0, 200)}`);
+    return r;
+  }
+
   async function runSearch(q: string) {
     if (!q.trim()) return;
     setQuery(q);
-    setStatus("Searching…");
     clearClusters();
+    setSelected(null);
     const t0 = performance.now();
-    try {
-      const r = await fetch("/search/text", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ query: q, aoi: aoi || null, date_range: t1 || t2 ? [t1 || null, t2 || null] : null, sensor: sensor || null }) });
-      if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
-      const body = await r.json();
-      const md: Mode = { kind: "text", query: q };
-      setFocusArea(null);
-      setSites(body.sites);
-      setTextResults({ sites: body.sites, mode: md });
-      setMode(md);
-      setQueryId(body.query_id ?? null);
-      setFb({});
-      setParsed(body.parsed);
-      setWarnings(body.warnings ?? []);
-      setSelected(null);
-      setStatus(`${body.sites.length} places found in ${(performance.now() - t0) / 1000 < 1 ? Math.round(performance.now() - t0) + " ms" : ((performance.now() - t0) / 1000).toFixed(1) + " s"}`);
-    } catch (err) {
-      setStatus(`Error: ${(err as Error).message}`);
-    }
+    const body = await call("Searching the archive…", async () => (await post("/search/text", { query: q, aoi: aoi || null, date_range: t1 || t2 ? [t1 || null, t2 || null] : null, sensor: sensor || null })).json());
+    if (!body) return;
+    const md: Mode = { kind: "text", query: q };
+    setFocusArea(null);
+    setSites(body.sites);
+    setTextResults({ sites: body.sites, mode: md });
+    setMode(md);
+    setQueryId(body.query_id ?? null);
+    setFb({});
+    setParsed(body.parsed);
+    setWarnings(body.warnings ?? []);
+    setStatus(`${body.sites.length} places · ${fmtMs(performance.now() - t0)}`);
   }
 
   function backToResults() {
@@ -235,58 +304,51 @@ export default function App() {
     setSites(textResults.sites);
     setMode(textResults.mode);
     setSelected(null);
-    setStatus("");
+    setStatus(`${textResults.sites.length} places`);
   }
 
   async function similar(seed: Site) {
-    setStatus("Looking for other places that look like this one…");
     clearClusters();
-    const r = await fetch("/search/image", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tile_id: seed.tile_id, k: 20 }) });
-    if (!r.ok) return setStatus(`Error ${r.status}: ${await r.text()}`);
-    const body = await r.json();
+    const body = await call("Finding places that look like this one…", async () => (await post("/search/image", { tile_id: seed.tile_id, k: 20 })).json());
+    if (!body) return;
     setFocusArea(null);
     setSites(body.sites);
     setMode({ kind: "similar", seed, season: body.seed.season });
     setSelected(null);
-    setStatus(`${body.sites.length} look-alike places (overlapping neighbours of the original are left out)`);
+    setStatus(`${body.sites.length} look-alike places`);
   }
 
   async function clusters(seed: Site) {
-    setStatus("Grouping places that look alike…");
-    const r = await fetch("/discover/cluster", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ seed_tile_id: seed.tile_id }) });
-    if (!r.ok) return setStatus(`Error ${r.status}: ${await r.text()}`);
-    const body = await r.json();
+    const body = await call("Grouping look-alike places…", async () => (await post("/discover/cluster", { seed_tile_id: seed.tile_id })).json());
+    if (!body) return;
     const feats = body.clusters.flatMap((c: { cluster: number; members: { tile_id: string; geometry: GeoJSON.Polygon }[] }) =>
       c.members.map((m) => ({ type: "Feature", geometry: m.geometry, properties: { cluster: c.cluster, tile_id: m.tile_id } })));
     (map.current?.getSource("clusters") as GeoJSONSource | undefined)?.setData({ type: "FeatureCollection", features: feats });
     setGroups({ seed: seed.tile_id, list: body.clusters, noise: body.noise.length });
-    setStatus(`${body.clusters.length} groups of look-alike places: see the map legend`);
+    setStatus(`${body.clusters.length} look-alike groups on the map`);
   }
 
   async function siteFeedback(tile: string, decision: "confirm" | "reject") {
     if (!queryId) return;
-    setStatus(decision === "confirm" ? "Marking as relevant…" : "Removing and re-ranking…");
-    const r = await fetch("/feedback", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ target: { type: "site", id: tile }, decision, query_id: queryId }) });
-    if (!r.ok) return setStatus(`Error ${r.status}`);
-    const body = await r.json();
+    const body = await call(decision === "confirm" ? "Learning from your choice…" : "Removing and re-ranking…", async () => (await post("/feedback", { target: { type: "site", id: tile }, decision, query_id: queryId })).json());
+    if (!body) return;
     setFb(body.feedback ?? {});
     setSites(body.sites);
     setTextResults((t) => (t ? { ...t, sites: body.sites } : t));
-    setStatus(`Re-ranked using your ${Object.keys(body.feedback ?? {}).length} decision(s). Saved in the audit log.`);
+    setStatus(`Re-ranked with ${Object.keys(body.feedback ?? {}).length} decision(s) · audited`);
   }
 
   async function exportQuery() {
     if (!queryId) return;
-    setStatus("Preparing signed package…");
-    const r = await fetch("/export", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ query_id: queryId, format: "gpkg" }) });
-    if (!r.ok) return setStatus(`Export error ${r.status}: ${await r.text()}`);
+    const r = await call("Preparing the signed package…", () => post("/export", { query_id: queryId, format: "gpkg" }));
+    if (!r) return;
     const url = URL.createObjectURL(await r.blob());
     const a = document.createElement("a");
     a.href = url;
     a.download = (r.headers.get("Content-Disposition")?.match(/filename="(.+)"/) ?? [])[1] ?? "export.zip";
     a.click();
     URL.revokeObjectURL(url);
-    setStatus("Signed package downloaded (digitally signed, recorded in the audit log).");
+    setStatus("Signed package downloaded (Ed25519 signature, audited)");
   }
 
   function showEvent(ev: EventRow | null) {
@@ -294,9 +356,20 @@ export default function App() {
     if (!m || !ready) return;
     setShowEventLayer(!!ev);
     (m.getSource("event") as GeoJSONSource).setData(ev ? { type: "Feature", geometry: ev.geometry, properties: {} } : EMPTY);
+    // Review tab: the tile's "after" image under the changed area, so the outline has context
+    if (m.getLayer("event-chip")) m.removeLayer("event-chip");
+    if (m.getSource("event-chip")) m.removeSource("event-chip");
+    const full = ev as FullEvent | null;
+    const img = full?.images?.after ?? full?.images?.before;
+    if (tab === "review" && img && full?.tile_geometry) {
+      const ring = full.tile_geometry.coordinates[0];
+      m.addSource("event-chip", { type: "image", url: `${img.chip_url}?size=256`, coordinates: [ring[3], ring[2], ring[1], ring[0]] as [number, number][] as never });
+      m.addLayer({ id: "event-chip", type: "raster", source: "event-chip", paint: { "raster-opacity": 0.95 } }, "clusters-fill");
+    }
     if (ev) {
       const cs = ev.geometry.coordinates.flat(2) as GeoJSON.Position[];
-      m.fitBounds([Math.min(...cs.map((c) => c[0])), Math.min(...cs.map((c) => c[1])), Math.max(...cs.map((c) => c[0])), Math.max(...cs.map((c) => c[1]))] as LngLatBoundsLike, { padding: 120, maxZoom: 15 });
+      const right = Math.min(500, m.getContainer().clientWidth / 2); // the details panel covers the right side
+      m.fitBounds([Math.min(...cs.map((c) => c[0])), Math.min(...cs.map((c) => c[1])), Math.max(...cs.map((c) => c[0])), Math.max(...cs.map((c) => c[1]))] as LngLatBoundsLike, { padding: { top: 100, bottom: 100, left: 100, right: right + 60 }, maxZoom: 15 });
     }
   }
 
@@ -310,167 +383,210 @@ export default function App() {
     fetch(`/events/${selBest}`).then((r) => r.json()).then((d) => { if (live) { setSelEvent(d); showEvent(d); } });
     return () => { live = false; };
   }, [selBest]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => { // Esc closes the details panel / dialogs
+    const k = (e: KeyboardEvent) => { if (e.key === "Escape") { setHelp(false); setSettings(false); if (tab === "search") setSelected(null); } };
+    window.addEventListener("keydown", k);
+    return () => window.removeEventListener("keydown", k);
+  }, [tab]);
+
   const pills = parsed && mode?.kind === "text" ? [
-    parsed.change ? `Looking for change: ${parsed.change_types.map(typeLabel).join(" / ") || "any type"}` : "Looking at appearance (no change filter)",
-    ...Object.entries(parsed.near).map(([t, m]) => `Within ${m / 1000} km of ${t === "water" ? "water (river, lake, reservoir, creek or salt pan: not told apart)" : t}`),
-    parsed.date_range ? `Dates ${parsed.date_range[0] ?? "…"} → ${parsed.date_range[1] ?? "…"}` : null,
+    parsed.change ? `Change: ${parsed.change_types.map(typeLabel).join(" / ") || "any type"}` : "Appearance search",
+    ...Object.entries(parsed.near).map(([t, m]) => `Within ${m / 1000} km of ${t === "water" ? "water*" : t}`),
+    parsed.date_range ? `${parsed.date_range[0] ?? "…"} → ${parsed.date_range[1] ?? "…"}` : null,
     parsed.aoi ? `Area: ${parsed.aoi}` : null,
-    parsed.landcover?.length ? `Land cover: ${parsed.landcover.join(" / ")} (independent annual map)` : null,
-    `Appearance: “${parsed.semantic}”`,
+    parsed.landcover?.length ? `Land cover: ${parsed.landcover.join(" / ")}` : null,
+    `“${parsed.semantic}”`,
   ].filter(Boolean) as string[] : [];
+  const activeFilters = [aoi, t1, t2, sensor].filter(Boolean).length;
+  const switchTab = (t: Tab) => { setTab(t); if (t !== "search") clearClusters(); if (t !== "review") showEvent(null); };
 
   return (
-    <div className="app">
-      <aside>
-        <header>
-          <h1>EO Archive</h1>
-          <p className="sub">Search satellite imagery by meaning, and review detected changes. Runs fully offline.</p>
-        </header>
-        <div className="tabs" role="tablist">
-          <button role="tab" aria-selected={tab === "search"} className={tab === "search" ? "on" : ""} onClick={() => setTab("search")}>Search places</button>
-          <button role="tab" aria-selected={tab === "review"} className={tab === "review" ? "on" : ""} onClick={() => { setTab("review"); clearClusters(); }}>Review changes</button>
-          <button role="tab" aria-selected={tab === "system"} className={tab === "system" ? "on" : ""} onClick={() => setTab("system")}>System</button>
-        </div>
-
-        {tab === "system" ? <System /> : tab === "review" ? <Review onShow={showEvent} drawer={drawerEl} /> : <>
-          <form onSubmit={(e) => { e.preventDefault(); runSearch(query); }}>
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Describe what you are looking for…" autoFocus />
-            <select value={aoi} onChange={(e) => setAoi(e.target.value)} aria-label="Area of interest">
-              {AOIS.map((a) => <option key={a} value={a}>{a ? `Area: ${a}` : "All areas"}</option>)}
-            </select>
-            <button type="submit" className="primary">Search</button>
-            <div className="row dates">
-              <label>Changed/imaged from <input type="date" value={t1} onChange={(e) => setT1(e.target.value)} /></label>
-              <label>to <input type="date" value={t2} onChange={(e) => setT2(e.target.value)} /></label>
-            </div>
-            <select value={sensor} onChange={(e) => setSensor(e.target.value)} aria-label="Sensor">
-              <option value="">Any sensor</option>
-              {Object.entries(SENSOR_TEXT).map(([k, v]) => <option key={k} value={k}>{k === "sentinel2" ? v : `Changes confirmed by ${v}`}</option>)}
-            </select>
-          </form>
-          {!mode && (
-            <div className="examples">
-              <span className="muted">Try:</span>
-              {EXAMPLES.map((x) => <button key={x} className="chip" onClick={() => runSearch(x)}>{x}</button>)}
-            </div>
-          )}
-          <p className="status">{status}</p>
-
-          {mode?.kind === "text" && (
-            <div className="banner">
-              <div className="banner-title">Results for “{mode.query}”</div>
-              <div className="pills">{pills.map((p) => <span key={p} className="pill">{p}</span>)}</div>
-              {warnings.map((w) => <p key={w} className="warn">{WARNING_TEXT[w] ?? w}</p>)}
-              {areaCounts.length > 1 && <div className="areas">Results in: {areaCounts.map(([a, k]) => <button key={a} className={`chip ${a === focusArea ? "on" : ""}`} onClick={() => zoomToArea(a)}>{a} ({k})</button>)}</div>}
-              {queryId && sites.length > 0 && <button className="ghost" onClick={exportQuery}>Download signed results</button>}
-            </div>
-          )}
-          {mode?.kind === "similar" && (
-            <div className="banner">
-              <div className="banner-title">Places that look like this one</div>
-              <div className="seed">
-                {mode.seed.chip_url && <img src={`/chips/${mode.seed.tile_id}/${mode.season}.png`} alt="" width={56} height={56} />}
-                <div className="muted">Original place: {mode.seed.aoi} · compared using its {seasonLabel(mode.season)} image. Ranked by visual similarity (Prithvi model).</div>
+    <div className="shell">
+      <header className="topbar">
+        <div className="brand"><Icon.Logo /><div><b>EO Archive</b><span>Semantic search &amp; change analysis</span></div></div>
+        <nav className="nav" role="tablist">
+          <button role="tab" aria-selected={tab === "search"} className={tab === "search" ? "on" : ""} onClick={() => switchTab("search")}><Icon.Search /> Search</button>
+          <button role="tab" aria-selected={tab === "review"} className={tab === "review" ? "on" : ""} onClick={() => switchTab("review")}><Icon.Change /> Review changes</button>
+          <button role="tab" aria-selected={tab === "system"} className={tab === "system" ? "on" : ""} onClick={() => switchTab("system")}><Icon.Chart /> System</button>
+        </nav>
+        <div className="top-right">
+          {archive && <span className="chip-stat" title="Indexed archive">{Math.round(archive.area_km2).toLocaleString("en-IN")} km² · {archive.scenes} scenes</span>}
+          <span className="chip-stat ok" title="All models and data are local; no internet is used at runtime"><i className="live" /> Offline</span>
+          <button className="icon-btn" title="How to use (?)" onClick={() => setHelp(true)}><Icon.Help size={18} /></button>
+          <div className="pop-wrap">
+            <button className="icon-btn" title="Settings" onClick={() => setSettings((v) => !v)}><Icon.Gear size={18} /></button>
+            {settings && (
+              <div className="popover">
+                <label>API key <span className="muted">(only when login is enabled: {archive?.auth ?? "…"})</span>
+                  <input type="password" value={apiKey} placeholder="paste key" onChange={(e) => { setApiKey(e.target.value); try { localStorage.setItem("apikey", e.target.value); } catch { /* ignore */ } }} />
+                </label>
               </div>
-              {areaCounts.length > 1 && <div className="areas">Results in: {areaCounts.map(([a, k]) => <button key={a} className={`chip ${a === focusArea ? "on" : ""}`} onClick={() => zoomToArea(a)}>{a} ({k})</button>)}</div>}
-              {textResults && <button className="ghost" onClick={backToResults}>← Back to search results</button>}
-            </div>
-          )}
+            )}
+          </div>
+        </div>
+      </header>
 
-          <ol className="results">
-            {sites.map((s) => (
-              <li key={s.tile_id} className={s.tile_id === selected ? "sel" : ""} onClick={() => setSelected(s.tile_id)}>
-                <div className="thumb">
-                  {s.chip_url ? <img src={s.chip_url} alt="" width={72} height={72} /> : <div className="nochip" />}
-                  <span className="rank">{s.rank}</span>
+      <div className="app">
+        <aside>
+          {tab === "system" ? <System /> : tab === "review" ? <Review onShow={showEvent} drawer={drawerEl} /> : <>
+            <form className="searchbox" onSubmit={(e) => { e.preventDefault(); runSearch(query); }}>
+              <div className="search-input">
+                <Icon.Search />
+                <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Describe what you are looking for…" aria-label="Search query" autoFocus />
+                <button type="button" className={`icon-btn ${showFilters || activeFilters ? "on" : ""}`} title="Filters" onClick={() => setShowFilters((v) => !v)}>
+                  <Icon.Filter />{activeFilters > 0 && <span className="badge">{activeFilters}</span>}
+                </button>
+              </div>
+              {showFilters && (
+                <div className="filters">
+                  <label>Area<select value={aoi} onChange={(e) => setAoi(e.target.value)}>{AOIS.map((a) => <option key={a} value={a}>{a || "All areas"}</option>)}</select></label>
+                  <label>Sensor<select value={sensor} onChange={(e) => setSensor(e.target.value)}>
+                    <option value="">Any</option>
+                    {Object.entries(SENSOR_TEXT).map(([k, v]) => <option key={k} value={k}>{k === "sentinel2" ? v : `Confirmed by ${v}`}</option>)}
+                  </select></label>
+                  <label>From<input type="date" value={t1} onChange={(e) => setT1(e.target.value)} /></label>
+                  <label>To<input type="date" value={t2} onChange={(e) => setT2(e.target.value)} /></label>
+                  {activeFilters > 0 && <button type="button" className="link" onClick={() => { setAoi(""); setSensor(""); setT1(""); setT2(""); }}>Clear filters</button>}
                 </div>
-                <div className="body">
-                  <div className="line">{headline(s)}</div>
-                  <div className="line meta">
-                    Match <Bar v={s.parts.sim_norm ?? s.score} />
-                    {"water" in s.dist_m && <span>· {fmtDist(s.dist_m.water)} water</span>}
-                    {"road" in s.dist_m && s.dist_m.road < 2000 && <span>· {fmtDist(s.dist_m.road)} road</span>}
-                  </div>
-                  <div className="line muted">{s.aoi} · picture: {seasonLabel(s.season)}{s.events.length ? " (current state)" : ""}{s.q_mean !== null && s.q_mean < 0.8 ? " · partly cloudy" : ""}</div>
-                  <div className="actions" onClick={(e) => e.stopPropagation()}>
-                    <button className="ghost small" title="Find other places that look like this (image search)" onClick={() => similar(s)}>Look-alikes</button>
-                    <button className="ghost small" title="Colour groups of look-alike places on the map" onClick={() => clusters(s)}>Groups</button>
-                    {queryId && mode?.kind === "text" && <>
-                      <button className={`ghost small ${fb[s.tile_id] === "confirm" ? "on" : ""}`} title="Relevant: pull similar results up" onClick={() => siteFeedback(s.tile_id, "confirm")}>✓ Relevant</button>
-                      <button className="ghost small" title="Not relevant: remove and re-rank" onClick={() => siteFeedback(s.tile_id, "reject")}>✗ Not relevant</button>
-                    </>}
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ol>
+              )}
+              <button type="submit" className="primary block" disabled={busy}>{busy ? "Searching…" : "Search"}</button>
+            </form>
 
+            {error && <div className="alert">Something went wrong: {error}</div>}
 
-          <details className="help">
-            <summary>How to read this screen</summary>
-            <ul>
-              <li><b>Search</b> in plain words. The system understands change words (built, cleared, flooded), places (near a river, road) and dates (since 2023).</li>
-              <li>Each result is a 640 m square of ground. The picture is a cloud-free satellite image of it for one season.</li>
-              <li><b>Match</b> = how well it looks like your description. A coloured dot means a change was detected there, with how likely it is to be real.</li>
-              <li><b>✓ / ✗</b> teaches the search what you mean; the list re-ranks immediately.</li>
-              <li><b>Look-alikes</b> shows other places that look like the chosen one. <b>Groups</b> colours groups of similar places on the map.</li>
-              <li>At 10 m per pixel we see construction sites, clearing, mining, water and major roads, not individual vehicles or small buildings.</li>
-            </ul>
-          </details>
-          <input className="apikey" type="password" value={apiKey} placeholder="API key (only if login is enabled)" aria-label="API key"
-            onChange={(e) => { setApiKey(e.target.value); try { localStorage.setItem("apikey", e.target.value); } catch { /* ignore */ } }} />
-        </>}
-      </aside>
-      <main>
-        <div ref={mapDiv} className="map" />
-        <div ref={setDrawerEl} />
-            {tab === "search" && sel && (
-              <section className="drawer">
-                <button className="close" title="Close" onClick={() => setSelected(null)}>×</button>
-                <h2>Place #{sel.rank}: details</h2>
-                {sel.events.length > 0
-                  ? (selEvent ? <EvidencePanel ev={selEvent} /> : <p className="muted">Loading evidence…</p>)
-                  : sel.chip_url && <><img src={`${sel.chip_url}?size=160`} alt="" className="big" /><p className="muted">{seasonLabel(sel.season)} image; no change stored at this place.</p></>}
-                <h3>Why it is ranked here</h3>
-                <table className="why"><tbody>
-                  <tr><td>Looks like your description</td><td><Bar v={sel.parts.sim_norm ?? 0} /></td></tr>
-                  <tr><td>Confidence of a detected change</td><td><Bar v={sel.parts.event_conf ?? 0} /></td></tr>
-                  <tr><td>Image quality (cloud-free)</td><td><Bar v={sel.parts.q ?? 0} /></td></tr>
-                  <tr><td>Fits the place you asked for</td><td><Bar v={sel.parts.spatial_fit ?? 0} /></td></tr>
-                {(sel.parts.landcover ?? 0) > 0 && <tr><td>Share of that land cover (independent map)</td><td><Bar v={sel.parts.landcover} /></td></tr>}
-                </tbody></table>
-                {sel.events.length > 1 && <h3>All changes at this place</h3>}
-                {sel.events.length > 1 && sel.events.map((e) => (
-                  <p key={e.event_id} className="evline"><i className="dot" style={{ background: TYPE_COLOUR[e.change_type] }} />{typeLabel(e.change_type)} · first seen {e.earliest_supported_date} · <ConfTag c={e.confidence} /> <span className="muted">({e.event_id})</span></p>
+            {!mode && !busy && (
+              <div className="empty">
+                <h3>Search 7 years of satellite imagery by meaning</h3>
+                <p className="muted">Sentinel-2, Sentinel-1 and Landsat over {archive ? Object.keys(archive.aois).length : 3} areas. Try one of these:</p>
+                <div className="examples">{EXAMPLES.map((x) => <button key={x} className="chip" onClick={() => runSearch(x)}>{x}</button>)}</div>
+              </div>
+            )}
+
+            {mode && (
+              <div className="results-head">
+                {mode.kind === "text" ? (
+                  <>
+                    <div className="rh-row"><b className="rh-title">“{mode.query}”</b>
+                      {queryId && sites.length > 0 && <button className="icon-btn" title="Download signed results (GeoJSON + GeoPackage)" onClick={exportQuery}><Icon.Download /></button>}
+                    </div>
+                    <div className="pills">{pills.map((p) => <span key={p} className="pill">{p}</span>)}</div>
+                    {Object.keys(parsed?.near ?? {}).includes("water") && <p className="fine">* water = river, lake, reservoir, creek or salt pan (the water map does not tell them apart)</p>}
+                  </>
+                ) : (
+                  <>
+                    <div className="rh-row">
+                      <button className="link" onClick={backToResults} disabled={!textResults}><Icon.Back /> Back</button>
+                      <b className="rh-title">Places like this one</b>
+                    </div>
+                    <div className="seed">
+                      {mode.seed.chip_url && <img src={`/chips/${mode.seed.tile_id}/${mode.season}.png`} alt="" width={48} height={48} />}
+                      <span className="muted">{mode.seed.aoi} · {seasonLabel(mode.season)} image · ranked by visual similarity (Prithvi-EO-2.0)</span>
+                    </div>
+                  </>
+                )}
+                {warnings.map((w) => <p key={w} className="warn">{WARNING_TEXT[w] ?? w}</p>)}
+                {areaCounts.length > 1 && <div className="areas">{areaCounts.map(([a, k]) => <button key={a} className={`chip ${a === focusArea ? "on" : ""}`} onClick={() => zoomToArea(a)}>{a} <b>{k}</b></button>)}</div>}
+              </div>
+            )}
+            <div className={`status ${busy ? "busy" : ""}`}>{busy && <i className="spinner" />}{status}</div>
+
+            {busy && !sites.length ? <Skeleton /> : (
+              <ol className="results">
+                {sites.map((s) => (
+                  <li key={s.tile_id} id={`r-${s.tile_id}`} className={s.tile_id === selected ? "sel" : ""} onClick={() => setSelected(s.tile_id)}>
+                    <div className="thumb">
+                      {s.chip_url ? <img src={s.chip_url} alt="" width={68} height={68} loading="lazy" /> : <div className="nochip" />}
+                      <span className="rank">{s.rank}</span>
+                    </div>
+                    <div className="body">
+                      <div className="line">{headline(s)}{s.events.length > 0 && <ConfTag c={Math.max(...s.events.map((e) => e.confidence))} />}</div>
+                      <div className="line meta">
+                        <span className="kv">match <Bar v={s.parts.sim_norm ?? s.score} /></span>
+                        {"water" in s.dist_m && <span className="kv">{fmtDist(s.dist_m.water)} water</span>}
+                        {"road" in s.dist_m && s.dist_m.road < 2000 && <span className="kv">{fmtDist(s.dist_m.road)} road</span>}
+                      </div>
+                      <div className="line fine">{s.aoi} · {seasonLabel(s.season)}{s.events.length ? " (current)" : ""}{s.q_mean !== null && s.q_mean < 0.8 ? " · partly cloudy" : ""}</div>
+                    </div>
+                    <div className="actions" onClick={(e) => e.stopPropagation()}>
+                      <button className="icon-btn" title="Look-alikes: other places that look like this" onClick={() => similar(s)}><Icon.Similar /></button>
+                      <button className="icon-btn" title="Groups: colour clusters of similar places" onClick={() => clusters(s)}><Icon.Group /></button>
+                      {queryId && mode?.kind === "text" && <>
+                        <button className={`icon-btn good ${fb[s.tile_id] === "confirm" ? "on" : ""}`} title="Relevant: pull similar results up" onClick={() => siteFeedback(s.tile_id, "confirm")}><Icon.Check /></button>
+                        <button className="icon-btn bad" title="Not relevant: remove and re-rank" onClick={() => siteFeedback(s.tile_id, "reject")}><Icon.X /></button>
+                      </>}
+                    </div>
+                  </li>
                 ))}
-                <details>
-                  <summary>Search provenance (images and models behind this result)</summary>
-                  <p>Satellite scenes used: {sel.provenance.scene_ids.length}</p>
+              </ol>
+            )}
+          </>}
+        </aside>
+
+        <main>
+          <div ref={mapDiv} className="map" />
+          <div ref={setDrawerEl} />
+          {tab === "search" && sel && (
+            <section className="drawer">
+              <div className="drawer-head">
+                <span className="rank big">{sel.rank}</span>
+                <div><b>Result {sel.rank}</b><span className="muted"> · {sel.aoi}</span></div>
+                <button className="icon-btn close" title="Close (Esc)" onClick={() => setSelected(null)}><Icon.X /></button>
+              </div>
+              <div className="drawer-body">
+                {sel.events.length > 0
+                  ? (selEvent ? <EvidencePanel ev={selEvent} /> : <p className="muted"><i className="spinner" /> Loading evidence…</p>)
+                  : sel.chip_url && <div className="card"><img src={`${sel.chip_url}?size=200`} alt="" className="big" /><p className="muted">{seasonLabel(sel.season)} · no change stored at this place</p></div>}
+                <div className="card">
+                  <h3>Why it is ranked here</h3>
+                  <table className="why"><tbody>
+                    <tr><td>Looks like your description</td><td><Bar v={sel.parts.sim_norm ?? 0} /></td></tr>
+                    <tr><td>Confidence of a detected change</td><td><Bar v={sel.parts.event_conf ?? 0} /></td></tr>
+                    <tr><td>Image quality (cloud-free)</td><td><Bar v={sel.parts.q ?? 0} /></td></tr>
+                    <tr><td>Fits the place you asked for</td><td><Bar v={sel.parts.spatial_fit ?? 0} /></td></tr>
+                    {(sel.parts.landcover ?? 0) > 0 && <tr><td>Share of that land cover (independent map)</td><td><Bar v={sel.parts.landcover} /></td></tr>}
+                  </tbody></table>
+                </div>
+                {sel.events.length > 1 && (
+                  <div className="card">
+                    <h3>All changes at this place</h3>
+                    {sel.events.map((e) => (
+                      <p key={e.event_id} className="evline"><i className="dot" style={{ background: TYPE_COLOUR[e.change_type] }} />{typeLabel(e.change_type)} · {e.earliest_supported_date} <ConfTag c={e.confidence} /></p>
+                    ))}
+                  </div>
+                )}
+                <details className="card">
+                  <summary>Search provenance</summary>
+                  <p>Satellite scenes behind this picture: {sel.provenance.scene_ids.length}</p>
                   <p className="mono">{sel.provenance.scene_ids.join(", ")}</p>
                   <p>Models: {Object.entries(sel.provenance.model_versions).map(([k, v]) => `${k} = ${v}`).join(", ") || "—"}</p>
                   <p>Change-detection version: {sel.provenance.cascade_version?.join(", ") ?? "—"}</p>
                   <p>Grid cells: {sel.member_tiles.join(", ")}</p>
                 </details>
-              </section>
-            )}
+              </div>
+            </section>
+          )}
 
-        <div className="legend">
-          <b>Map key</b>
-          {tab === "search" && <>
-            <div><i className="sw line" style={{ borderColor: "#f5b400" }} /> Result (satellite image inside)</div>
-            <div><i className="sw line" style={{ borderColor: "#fff" }} /> Selected result</div>
-          </>}
-          {showEventLayer && tab !== "system" && <div><i className="sw" style={{ background: "rgba(255,59,48,.5)", borderColor: "#ff3b30" }} /> Area that changed</div>}
-          {tab === "review" && !showEventLayer && <div className="muted">Pick a change on the left</div>}
-          {groups && <>
-            <div className="muted" style={{ marginTop: 6 }}>Look-alike groups</div>
-            {groups.list.map((g, i) => (
-              <div key={g.cluster}><i className="sw" style={{ background: GROUP_COLOURS[g.cluster % 6] }} /> Group {String.fromCharCode(65 + i)}: {g.size} places{g.contains_seed ? " (incl. your place)" : ""}</div>
-            ))}
-            <div className="muted">{groups.noise} places fit no group</div>
-          </>}
-        </div>
-      </main>
+          <div className="legend">
+            <div className="legend-title">Map key</div>
+            <div><i className="sw line dash-blue" /> Archive coverage</div>
+            {tab === "search" && sites.length > 0 && <>
+              <div><i className="sw line" style={{ borderColor: "#f5b400" }} /> Result (satellite picture)</div>
+              <div><i className="sw line" style={{ borderColor: "#fff" }} /> Selected</div>
+            </>}
+            {showEventLayer && tab !== "system" && <div><i className="sw" style={{ background: "rgba(255,59,48,.5)", borderColor: "#ff3b30" }} /> Area that changed</div>}
+            {groups && <>
+              <div className="legend-sub">Look-alike groups</div>
+              {groups.list.map((g, i) => (
+                <div key={g.cluster}><i className="sw" style={{ background: GROUP_COLOURS[g.cluster % 6] }} /> Group {String.fromCharCode(65 + i)} · {g.size}{g.contains_seed ? " (yours)" : ""}</div>
+              ))}
+              <div className="fine">{groups.noise} places fit no group</div>
+            </>}
+          </div>
+          {cursor && <div className="coords">{cursor[0].toFixed(5)}° N · {cursor[1].toFixed(5)}° E</div>}
+        </main>
+      </div>
+      {help && <HelpModal onClose={() => setHelp(false)} />}
     </div>
   );
 }
