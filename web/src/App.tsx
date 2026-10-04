@@ -170,9 +170,15 @@ export default function App() {
         const entries = Object.entries(st.aois).filter(([, a]) => a.bbox);
         // Load water context layers (JRC GSW, offline) — one per AOI, added below the site layers
         entries.forEach(([name]) => {
+          // Offline satellite backdrop (our own Sentinel-2 composite), dimmed so results stand out
+          fetch(`/context/${name}/basemap.json`).then((r) => (r.ok ? r.json() : null)).then((b) => {
+            if (!b) return;
+            m.addSource(`basemap-${name}`, { type: "image", url: b.url, coordinates: b.coordinates });
+            m.addLayer({ id: `basemap-${name}`, type: "raster", source: `basemap-${name}`, paint: { "raster-brightness-max": 0.8, "raster-saturation": -0.2 } }, "aois-fill");
+          });
           const srcId = `water-${name}`;
           m.addSource(srcId, { type: "geojson", data: `/context/${name}/water.geojson` });
-          m.addLayer({ id: `${srcId}-fill`, type: "fill", source: srcId, paint: { "fill-color": "#1a6fa8", "fill-opacity": 0.55 } }, "clusters-fill");
+          m.addLayer({ id: `${srcId}-fill`, type: "fill", source: srcId, paint: { "fill-color": "#1a6fa8", "fill-opacity": 0.25 } }, "clusters-fill");
           m.addLayer({ id: `${srcId}-line`, type: "line", source: srcId, paint: { "line-color": "#4db6f5", "line-width": 0.8, "line-opacity": 0.7 } }, "clusters-fill");
         });
         (m.getSource("aois") as GeoJSONSource).setData({
@@ -604,6 +610,7 @@ export default function App() {
 
           <div className="legend">
             <div className="legend-title">Map key</div>
+            <div><i className="sw" style={{ background: "#3d4a2c" }} /> Backdrop: Sentinel-2 (own archive)</div>
             <div><i className="sw" style={{ background: "#1a6fa8", border: "1px solid #4db6f5" }} /> Water (JRC)</div>
             <div><i className="sw line dash-blue" /> Archive coverage</div>
             {tab === "search" && sites.length > 0 && <>

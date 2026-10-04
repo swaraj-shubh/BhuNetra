@@ -939,8 +939,57 @@ def context_water(aoi: str) -> Response:
     p = paths.data / "context" / f"{aoi}_water.geojson"
     if not p.exists():
         raise HTTPException(404, f"No water context for {aoi!r}")
-    return Response(p.read_bytes(), media_type="application/geo+json",
-                    headers={"Cache-Control": "public, max-age=86400"})
+    return Response(
+        p.read_bytes(), media_type="application/geo+json", headers={"Cache-Control": "public, max-age=86400"}
+    )
+
+
+@app.get("/context/{aoi}/basemap.json")
+def context_basemap(aoi: str) -> dict:
+    """True-colour satellite backdrop for the map: the most complete recent composite, rendered once and cached."""
+    import numpy as np
+
+    if aoi not in aois:
+        raise HTTPException(404, f"Unknown AOI {aoi!r}")
+    out = paths.data / "context"
+    meta, img = out / f"{aoi}_basemap.json", out / f"{aoi}_basemap.webp"
+    if not (meta.exists() and img.exists()):
+        comps = sorted((paths.composites / aoi).glob("*.tif"))[-8:]  # newest 8 seasons only
+        if not comps:
+            raise HTTPException(404, f"No composites for {aoi!r}")
+        best, best_valid = comps[-1], -1.0
+        for f in comps:
+            with rasterio.open(f) as d:
+                red = d.read(d.descriptions.index("red") + 1, out_shape=(256, 256))
+            valid = float(np.isfinite(red).mean())
+            if valid >= best_valid:  # ties go to the newer season
+                best, best_valid = f, valid
+        with rasterio.open(best) as d:
+            scale = min(1.0, 2048 / max(d.width, d.height))
+            shape = (round(d.height * scale), round(d.width * scale))
+            r, g, b = (d.read(d.descriptions.index(n) + 1, out_shape=shape) for n in ("red", "green", "blue"))
+            x0, y0, x1, y1 = d.bounds
+            to_ll = Transformer.from_crs(d.crs, "EPSG:4326", always_xy=True)
+        alpha = (np.isfinite(r) & np.isfinite(g) & np.isfinite(b)).astype(np.uint8) * 255
+        out.mkdir(parents=True, exist_ok=True)
+        Image.fromarray(np.dstack([rgb_quicklook(r, g, b), alpha])).save(
+            img, quality=80, method=6
+        )  # WebP keeps the transparent no-data edge at ~1/10 the size of PNG
+        corners = [
+            list(to_ll.transform(x, y)) for x, y in ((x0, y1), (x1, y1), (x1, y0), (x0, y0))
+        ]  # TL, TR, BR, BL
+        meta.write_text(json.dumps({"season": best.stem, "coordinates": corners}), encoding="utf-8")
+    return {**json.loads(meta.read_text(encoding="utf-8")), "url": f"/context/{aoi}/basemap.webp"}
+
+
+@app.get("/context/{aoi}/basemap.webp")
+def context_basemap_img(aoi: str) -> Response:
+    p = paths.data / "context" / f"{aoi}_basemap.webp"
+    if aoi not in aois or not p.exists():
+        raise HTTPException(404)
+    return Response(
+        p.read_bytes(), media_type="image/webp", headers={"Cache-Control": "public, max-age=86400"}
+    )
 
 
 if (paths.web / "dist").is_dir():
