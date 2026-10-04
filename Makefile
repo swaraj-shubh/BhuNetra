@@ -2,7 +2,7 @@
 # AWS box / Linux: uv is on PATH. Windows laptop: make UV="python -m uv" <target> (needs GNU make).
 UV      ?= uv
 RUN     := $(UV) run
-COMPOSE := docker compose --env-file docker/.env -f docker/compose.yaml
+COMPOSE := docker compose --env-file docker/.env -f docker/compose.yaml $(if $(shell command -v nvidia-smi),,-f docker/compose.cpu.yaml)
 OFFLINE := $(COMPOSE) -f docker/compose.offline.yaml
 # host-side tools (worker, reconcile) reach the stack via loopback ports; credentials from docker/.env
 -include docker/.env

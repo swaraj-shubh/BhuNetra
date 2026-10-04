@@ -1,0 +1,4 @@
+# CPU-only host (no NVIDIA runtime): drop the worker's GPU reservation. Added by the Makefile when nvidia-smi is absent.
+services:
+  worker:
+    deploy: !reset {}

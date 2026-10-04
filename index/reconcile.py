@@ -7,7 +7,7 @@ from sqlalchemy import text
 
 from index import db, qdrant
 
-BATCH = 1000
+BATCH = 500  # 1000 points with text_vec+eo_vec is ~33.5 MB of JSON, over Qdrant's 32 MB request limit
 
 
 KEYS = ("comp_id", "tile_id", "aoi", "season", "start_date", "end_date", "q_mean", "n_obs")
