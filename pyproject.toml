@@ -2,6 +2,8 @@
 name = "sih26227"
 version = "0.1.0"
 description = "Semantic retrieval and multi-temporal change analysis of satellite imagery (SIH finals)"
+readme = "README.md"
+license = "MIT"
 requires-python = ">=3.11,<3.12"
 dependencies = [
     "numpy",
