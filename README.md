@@ -85,7 +85,7 @@ configs/      thresholds and per-area settings
 docker/       Compose files and images
 ```
 
-Docs: [design reference](docs/DESIGN.md) · [runbook](docs/RUNBOOK.md) · [deployment](docs/AWS.md) · [problem statement](docs/PS_SIH26227.md) · [compliance matrix](docs/PS_COMPLIANCE.md) · [decisions](docs/decisions/)
+Docs: [design reference](docs/DESIGN.md) · [runbook](docs/RUNBOOK.md) · [deployment (AWS)](docs/AWS.md) · [deployment (GCP)](docs/GCP.md) · [problem statement](docs/PS_SIH26227.md) · [compliance matrix](docs/PS_COMPLIANCE.md) · [decisions](docs/decisions/)
 
 ## License
 
